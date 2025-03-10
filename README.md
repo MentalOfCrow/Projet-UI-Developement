@@ -29,6 +29,7 @@ Ce projet inclut :
 ---
 
 ## 📂 Structure du Projet
+`````js
 
 /jeu-dames
 │── backend/
@@ -73,7 +74,7 @@ Ce projet inclut :
 │── .gitignore                           # Fichiers à ignorer dans Git
 │── README.md                            # Documentation du projet
 
-
+`````
 ### Démarrer le serveur PHP
 - Lancer un serveur local avec :
 - php -S localhost:8000 -t public

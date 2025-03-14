@@ -7,7 +7,7 @@ require_once __DIR__ . '/../db/Database.php';
  */
 class User {
     // Propriétés de la base de données
-    private $db;
+    private $conn;
     private $table = "users";
     
     // Propriétés de l'utilisateur
@@ -22,7 +22,9 @@ class User {
      * Constructeur
      */
     public function __construct() {
-        $this->db = Database::getInstance()->getConnection();
+        // Obtenir la connexion à la base de données
+        $database = Database::getInstance();
+        $this->conn = $database->getConnection();
     }
     
     /**
@@ -41,7 +43,7 @@ class User {
             
             // Préparer la requête
             $query = "INSERT INTO " . $this->table . " (username, email, password) VALUES (:username, :email, :password)";
-            $stmt = $this->db->prepare($query);
+            $stmt = $this->conn->prepare($query);
             
             // Nettoyer les données
             $this->username = htmlspecialchars(strip_tags($this->username));
@@ -54,11 +56,11 @@ class User {
             
             // Exécuter la requête
             if ($stmt->execute()) {
-                $this->id = $this->db->lastInsertId();
+                $this->id = $this->conn->lastInsertId();
                 
                 // Créer une entrée dans la table des statistiques
                 $query = "INSERT INTO stats (user_id) VALUES (:user_id)";
-                $stmt = $this->db->prepare($query);
+                $stmt = $this->conn->prepare($query);
                 $stmt->bindParam(':user_id', $this->id);
                 $stmt->execute();
                 
@@ -79,7 +81,7 @@ class User {
     public function usernameExists() {
         try {
             $query = "SELECT id, password FROM " . $this->table . " WHERE username = :username LIMIT 1";
-            $stmt = $this->db->prepare($query);
+            $stmt = $this->conn->prepare($query);
             $stmt->bindParam(':username', $this->username);
             $stmt->execute();
             
@@ -104,7 +106,7 @@ class User {
     public function emailExists() {
         try {
             $query = "SELECT id FROM " . $this->table . " WHERE email = :email LIMIT 1";
-            $stmt = $this->db->prepare($query);
+            $stmt = $this->conn->prepare($query);
             $stmt->bindParam(':email', $this->email);
             $stmt->execute();
             
@@ -122,7 +124,7 @@ class User {
     public function readOne() {
         try {
             $query = "SELECT * FROM " . $this->table . " WHERE id = :id LIMIT 1";
-            $stmt = $this->db->prepare($query);
+            $stmt = $this->conn->prepare($query);
             $stmt->bindParam(':id', $this->id);
             $stmt->execute();
             
@@ -151,7 +153,7 @@ class User {
     public function updateLastLogin() {
         try {
             $query = "UPDATE " . $this->table . " SET last_login = NOW() WHERE id = :id";
-            $stmt = $this->db->prepare($query);
+            $stmt = $this->conn->prepare($query);
             $stmt->bindParam(':id', $this->id);
             
             return $stmt->execute();
@@ -168,7 +170,7 @@ class User {
     public function getStats() {
         try {
             $query = "SELECT * FROM stats WHERE user_id = :user_id LIMIT 1";
-            $stmt = $this->db->prepare($query);
+            $stmt = $this->conn->prepare($query);
             $stmt->bindParam(':user_id', $this->id);
             $stmt->execute();
             
@@ -199,7 +201,7 @@ class User {
     public function readAll() {
         try {
             $query = "SELECT id, username, email, created_at, last_login FROM " . $this->table;
-            $stmt = $this->db->prepare($query);
+            $stmt = $this->conn->prepare($query);
             $stmt->execute();
             
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -242,7 +244,7 @@ class User {
             $params[':id'] = $this->id;
             
             // Préparer et exécuter la requête
-            $stmt = $this->db->prepare($query);
+            $stmt = $this->conn->prepare($query);
             
             foreach ($params as $key => $value) {
                 $stmt->bindValue($key, $value);
@@ -262,7 +264,7 @@ class User {
     public function delete() {
         try {
             $query = "DELETE FROM " . $this->table . " WHERE id = :id";
-            $stmt = $this->db->prepare($query);
+            $stmt = $this->conn->prepare($query);
             $stmt->bindParam(':id', $this->id);
             
             return $stmt->execute();

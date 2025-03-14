@@ -23,6 +23,7 @@ function displayMessage($message, $type = 'info') {
 // Vérifier si PHP est en mode CLI
 $isCli = php_sapi_name() === 'cli';
 
+
 // En-tête HTML pour le mode navigateur
 if (!$isCli) {
     echo "<!DOCTYPE html>

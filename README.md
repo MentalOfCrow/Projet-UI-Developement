@@ -1,118 +1,173 @@
-# Projet-UI-Developement
-Le module UF Développement permet de créer un jeu de dames en ligne en appliquant les compétences en développement et bases de données. Il inclut un matchmaking, une gestion de file d’attente, un plateau interactif et un suivi des parties et scores.
+# Jeu de Dames en Ligne
 
-# 🎮 Jeu de Dames en Ligne
+Un jeu de dames en ligne avec des fonctionnalités de matchmaking, gestion de tour, IA et interface utilisateur moderne.
 
 ## 📌 Présentation du Projet
-Le module UF Développement permet de créer un **jeu de dames en ligne** en appliquant des compétences en **développement logiciel** et **gestion de bases de données**.  
-Ce projet inclut :
-- **Un système de matchmaking** pour trouver des adversaires en ligne.
-- **Une file d’attente** pour gérer les connexions des joueurs.
-- **Un plateau interactif** pour jouer en ligne.
-- **Un suivi des parties et des scores** via une base de données MySQL.
-- **Une authentification sécurisée** pour les utilisateurs.
 
----
+Ce projet est un **jeu de dames en ligne** complet développé avec PHP et MySQL, doté d'une interface utilisateur moderne utilisant Tailwind CSS. Le jeu respecte toutes les règles officielles du jeu de dames international et offre plusieurs modes de jeu.
+
+### Fonctionnalités principales
+- **Système de matchmaking** pour trouver des adversaires en ligne
+- **Mode contre l'IA** pour s'entraîner à tout moment
+- **Plateau interactif** avec visualisation des mouvements possibles
+- **Suivi des parties en cours et terminées**
+- **Promotion en dames** lorsqu'un pion atteint la dernière rangée
+- **Prises obligatoires** selon les règles officielles
+- **Authentification sécurisée** des utilisateurs
 
 ## 🛠️ Technologies Utilisées
+
 | **Technologie**      | **Utilisation** |
 |----------------------|------------------------------------------------------|
 | **PHP**              | Gestion du jeu, serveur et base de données           |
-| **MySQL**            | Stockage des parties, joueurs et scores              |
-| **HTML**             | Structure des pages du jeu                           |
-| **Tailwind CSS**     | Mise en page rapide et moderne                       |
-| **JavaScript**       | Interaction du jeu (mouvements des pions, affichage) |
-| **Canvas API**       | Affichage du plateau de jeu et des pions             |
-| **AJAX (Fetch API)** | Communication entre PHP et le frontend               |
-| **Sessions PHP**     | Gestion des connexions des joueurs                   |
+| **MySQL**            | Stockage des parties, joueurs et mouvements          |
+| **Tailwind CSS**     | Interface utilisateur moderne et responsive          |
+| **JavaScript**       | Interactivité du plateau et validation côté client   |
+| **Fetch API**        | Communication asynchrone avec le serveur             |
+| **PDO**              | Connexion sécurisée à la base de données             |
 
----
+## 🚀 Installation
+
+### Prérequis
+- PHP 7.4 ou supérieur
+- MySQL 5.7 ou supérieur
+- Un serveur web (Apache, Nginx)
+
+### Installation manuelle
+1. Clonez ce dépôt sur votre serveur web
+   ```bash
+   git clone https://github.com/votre-utilisateur/jeu-dames.git
+   ```
+
+2. Importez le fichier SQL dans votre base de données
+   ```bash
+   mysql -u username -p database_name < backend/db/db.sql
+   ```
+
+3. Configurez les informations de connexion dans `.env` ou `backend/includes/config.php`
+
+4. Démarrez le serveur PHP
+   ```bash
+   php -S localhost:8000 -t public
+   ```
+
+5. Accédez au jeu via `http://localhost:8000`
 
 ## 📂 Structure du Projet
-`````js
 
-/jeu-dames
-│── backend/
-│   │── controllers/
-│   │   │── AuthController.php        # Gestion de l'authentification (login, logout, inscription)
-│   │   │── GameController.php        # Gestion des parties et des coups
-│   │   │── MatchmakingController.php # Gestion du matchmaking
-│   │── db/
-│   │   │── Database.php              # Connexion à la base de données via PDO
-│   │   │── schema.sql                # Structure de la base de données
-│   │── includes/
-│   │   │── config.php                # Configuration générale du projet
-│   │   │── session.php               # Gestion des sessions utilisateurs
-│   │   │── header.php                # En-tête commun
-│   │   │── footer.php                # Pied de page commun
-│   │── models/
-│   │   │── Game.php                  # Modèle partie (mouvements, historique)
-│   │   │── User.php                  # Modèle utilisateur (login, inscription)
-│   │── routes.php                     # Gestion des routes (MVC)
-│── public/
-│   │── assets/
-│   │   │── css/
-│   │   │   │── tailwind.css          # Feuille de style Tailwind
-│   │   │── js/
-│   │   │   │── script.js             # Gestion des interactions du jeu
-│   │   │── images/                    # Dossier pour stocker les images
-│   │── index.php                      # Page principale (Accueil)
-│── views/
-│   │── errors/
-│   │   │── 404.php                    # Page d'erreur 404
-│   │── game/
-│   │   │── board.php                   # Affichage du plateau de jeu
-│   │   │── play.php                    # Interface principale de la partie
-│   │── auth/
-│   │   │── login.php                   # Page de connexion
-│   │   │── register.php                 # Page d'inscription
-│   │── pages/
-│   │   │── about.php                    # À propos
-│   │   │── faq.php                      # Foire aux questions
-│   │   │── help.php                     # Aide
-│── .env                                 # Variables d'environnement (DB, clés secrètes)
-│── .gitignore                           # Fichiers à ignorer dans Git
-│── README.md                            # Documentation du projet
+```
+/
+├── backend/                   # Code serveur (non accessible par le web)
+│   ├── controllers/           # Contrôleurs (logique métier)
+│   │   ├── AuthController.php # Gestion de l'authentification
+│   │   ├── GameController.php # Gestion des parties et mouvements
+│   │   └── MatchmakingController.php # Gestion de la file d'attente
+│   ├── db/                    # Accès à la base de données
+│   │   ├── Database.php       # Classe de connexion à la base de données
+│   │   └── db.sql             # Script de création de la base de données
+│   ├── includes/              # Fichiers inclus communs
+│   │   ├── config.php         # Configuration globale
+│   │   ├── header.php         # En-tête HTML commun
+│   │   ├── footer.php         # Pied de page HTML commun
+│   │   └── session.php        # Gestion des sessions
+│   ├── logs/                  # Journaux d'erreurs et de débogage
+│   │   └── php_errors.log     # Journal des erreurs PHP
+│   └── models/                # Modèles de données
+│       ├── Game.php           # Modèle pour les parties
+│       └── User.php           # Modèle pour les utilisateurs
+├── public/                    # Fichiers accessibles par le web
+│   ├── api/                   # Points d'entrée API
+│   │   └── game/              # API pour le jeu
+│   │       ├── create_bot_game.php # Création d'une partie contre l'IA
+│   │       ├── move.php       # Gestion des mouvements de pièces
+│   │       ├── queue.php      # Gestion de la file d'attente
+│   │       └── status.php     # Vérification du statut de la partie
+│   ├── assets/                # Ressources statiques
+│   │   ├── css/               # Feuilles de style CSS
+│   │   │   └── style.css      # Styles personnalisés
+│   │   ├── js/                # Scripts JavaScript
+│   │   └── images/            # Images et icônes
+│   ├── auth/                  # Pages d'authentification
+│   │   ├── login.php          # Connexion
+│   │   ├── logout.php         # Déconnexion
+│   │   └── register.php       # Inscription
+│   ├── errors/                # Pages d'erreur
+│   │   └── 404.php            # Page non trouvée
+│   ├── game/                  # Pages de jeu
+│   │   ├── board.php          # Plateau de jeu
+│   │   └── play.php           # Liste des parties et options de jeu
+│   ├── pages/                 # Pages informatives
+│   │   ├── about.php          # À propos
+│   │   ├── faq.php            # FAQ
+│   │   └── help.php           # Aide
+│   ├── .htaccess              # Configuration du serveur Apache
+│   └── index.php              # Point d'entrée principal
+└── README.md                  # Documentation du projet
+```
 
-`````
-### Démarrer le serveur PHP
-- Lancer un serveur local avec :
-- php -S localhost:8000 -t public
+## 🎮 Guide de Jeu
 
-Accéder au projet dans le navigateur :
-🔗 http://localhost:8000/
+### 1. Création de compte et connexion
+- Rendez-vous sur la page d'accueil et cliquez sur "Inscription"
+- Remplissez le formulaire avec un nom d'utilisateur, un email et un mot de passe
+- Connectez-vous avec vos identifiants
 
+### 2. Jouer une partie
+- **Contre l'IA** : Cliquez sur "Commencer une partie contre l'IA" pour jouer immédiatement
+- **Contre un joueur** : Cliquez sur "Rejoindre la file d'attente" pour être jumelé avec un autre joueur
+- **Parties en cours** : Consultez la liste de vos parties actives et cliquez sur une partie pour la continuer
 
-### 🎮 Fonctionnalités du Jeu
-- ✅ Gestion des Joueurs
-- Inscription et connexion sécurisées avec hashage des mots de passe.
-- Sessions PHP pour garder les utilisateurs connectés.
-- ✅ Matchmaking Automatique
-- Gestion d’une file d’attente pour trouver un adversaire disponible.
-- Lancement automatique d'une partie dès que deux joueurs sont connectés.
-- ✅ Plateau de Jeu Dynamique
-- Affichage du plateau de dames interactif.
-- Mouvements des pions gérés avec JavaScript et AJAX.
-- Système de tour par tour.
-- ✅ Suivi des Parties et Scores
-- Stockage des parties et mise à jour des scores en base de données.
-- Possibilité de revoir l’historique des parties.
-- ✅ Pages Informatives
+### 3. Règles du jeu
+- Les pions se déplacent en diagonale vers l'avant
+- Les dames (pions couronnés) peuvent se déplacer en diagonale dans toutes les directions
+- La prise est obligatoire
+- Un pion qui atteint la dernière rangée est promu en dame
+- Le joueur qui capture toutes les pièces adverses ou bloque tous ses mouvements gagne la partie
 
-### À propos, FAQ, Aide pour les joueurs.
-🛠️ Développement & Évolutions Possibles
-🔹 Ajout d’un système de classement ELO 📈
-🔹 Mode spectateur pour observer les parties 🕵️
-🔹 Personnalisation des pions et du plateau 🎨
-🔹 Intelligence artificielle pour jouer contre un bot 🤖
+## 🔄 Évolution du Projet
 
-### 🤝 Contributeurs
-👨‍💻 Etudiant(s) Développeur(s) 
-📧 Contact : .....
+### Fonctionnalités implémentées
+- ✅ Système d'authentification complet
+- ✅ Création et gestion de parties
+- ✅ Mode de jeu contre l'IA
+- ✅ Plateau de jeu interactif
+- ✅ Visualisation des mouvements possibles
+- ✅ Validation des règles du jeu
+- ✅ Promotion en dame
+- ✅ Prises obligatoires
+- ✅ Suivi des parties en cours et historique
+- ✅ Possibilité d'abandonner une partie
 
-### 📜 Licence
-Ce projet est sous licence MIT. Vous pouvez l'utiliser, le modifier et le partager librement.
+### Améliorations récentes
+- ✅ Correction des problèmes de déplacement des pièces
+- ✅ Amélioration de l'interface utilisateur
+- ✅ Optimisation des requêtes à la base de données
+- ✅ Implémentation d'indicateurs visuels pour les mouvements possibles
+- ✅ Ajout de logs détaillés pour le débogage
 
-### 📢 Remarque Finale
-Merci d’avoir consulté ce projet ! 🎉
-Si vous avez des questions ou des suggestions, n’hésitez pas à me contacter.
+### Fonctionnalités à venir
+- [ ] Chat en jeu entre les joueurs
+- [ ] Système de classement ELO
+- [ ] Mode spectateur pour observer des parties
+- [ ] Replay des parties terminées
+- [ ] Notifications en temps réel
+- [ ] PWA (Progressive Web App) pour utilisation hors ligne
+- [ ] Différents niveaux de difficulté pour l'IA
+- [ ] Mode tournoi
+
+## 🤝 Contribution
+
+Les contributions sont les bienvenues ! N'hésitez pas à :
+1. Forker le projet
+2. Créer une branche pour votre fonctionnalité (`git checkout -b feature/ma-fonctionnalite`)
+3. Committer vos changements (`git commit -m 'Ajout de ma nouvelle fonctionnalité'`)
+4. Pousser sur la branche (`git push origin feature/ma-fonctionnalite`)
+5. Ouvrir une Pull Request
+
+## 📜 Licence
+
+Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
+
+## 📞 Contact
+
+Pour toute question ou suggestion, n'hésitez pas à ouvrir une issue sur GitHub.

@@ -28,12 +28,16 @@ if (session_status() === PHP_SESSION_NONE) {
 
 require_once __DIR__ . '/../models/User.php';
 require_once __DIR__ . '/../includes/session.php';
+require_once __DIR__ . '/../db/Database.php';
 
 class AuthController {
     private $user;
+    private $db;
 
     public function __construct() {
         $this->user = new User();
+        $database = Database::getInstance();
+        $this->db = $database->getConnection();
     }
 
     public function register() {
@@ -73,30 +77,57 @@ class AuthController {
     }
 
     public function login() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            // Récupération des données du formulaire
-            $username = $_POST['username'] ?? '';
-            $password = $_POST['password'] ?? '';
-            
-            // Validation des données
-            if (empty($username) || empty($password)) {
-                return ["success" => false, "message" => "Tous les champs sont obligatoires."];
-            }
-            
-            // Vérification si l'utilisateur existe
-            $this->user->username = $username;
-            if ($this->user->usernameExists() && password_verify($password, $this->user->password)) {
-                // Création de la session
-                Session::set('user_id', $this->user->id);
-                Session::set('username', $this->user->username);
-                
-                return ["success" => true, "message" => "Connexion réussie.", "redirect" => "/game/play.php"];
-            } else {
-                return ["success" => false, "message" => "Nom d'utilisateur ou mot de passe incorrect."];
-            }
+        if (!isset($_POST['username']) || !isset($_POST['password'])) {
+            return [
+                'success' => false,
+                'message' => 'Veuillez remplir tous les champs.'
+            ];
         }
         
-        return ["success" => false, "message" => "Méthode non autorisée."];
+        $input = $_POST['username']; // Peut être un email ou un nom d'utilisateur
+        $password = $_POST['password'];
+        
+        // Vérifier si l'entrée est un email
+        if (filter_var($input, FILTER_VALIDATE_EMAIL)) {
+            // Recherche par email
+            $sql = "SELECT * FROM users WHERE email = :input";
+        } else {
+            // Recherche par nom d'utilisateur (pour compatibilité)
+            $sql = "SELECT * FROM users WHERE username = :input";
+        }
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->bindParam(':input', $input);
+            $stmt->execute();
+            
+            if ($stmt->rowCount() > 0) {
+                $user = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (password_verify($password, $user['password'])) {
+                    $_SESSION['user_id'] = $user['id'];
+                    $_SESSION['username'] = $user['username'];
+                    $_SESSION['logged_in'] = true;
+                    
+                    return [
+                        'success' => true,
+                        'message' => 'Connexion réussie !',
+                        'redirect' => '/game/play.php'
+                    ];
+                }
+            }
+            
+            return [
+                'success' => false,
+                'message' => 'Email/nom d\'utilisateur ou mot de passe incorrect.'
+            ];
+            
+        } catch (PDOException $e) {
+            return [
+                'success' => false,
+                'message' => 'Erreur de connexion: ' . $e->getMessage()
+            ];
+        }
     }
 
     public function logout() {

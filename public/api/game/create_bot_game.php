@@ -47,6 +47,11 @@ try {
     // Log du résultat
     error_log("Résultat de createBotGame: " . json_encode($result));
     
+    // Vérifier que le fichier board.php existe
+    $boardFilePath = __DIR__ . '/../../game/board.php';
+    error_log("Vérification de l'existence du fichier board.php: " . ($boardFilePath));
+    error_log("Le fichier board.php existe: " . (file_exists($boardFilePath) ? 'Oui' : 'Non'));
+    
     // Nettoyer le tampon avant d'envoyer l'en-tête et les données JSON
     ob_end_clean();
     

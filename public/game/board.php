@@ -3,6 +3,15 @@
 while (ob_get_level()) ob_end_clean();
 ob_start();
 
+// Activer l'affichage des erreurs en développement
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+// Enregistrer les erreurs dans un fichier log
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/../../backend/logs/php_errors.log');
+
 require_once __DIR__ . '/../../backend/includes/config.php';
 require_once __DIR__ . '/../../backend/controllers/GameController.php';
 require_once __DIR__ . '/../../backend/includes/session.php';
@@ -11,6 +20,7 @@ require_once __DIR__ . '/../../backend/includes/session.php';
 if (!Session::isLoggedIn()) {
     // Nettoyer le buffer avant de rediriger
     ob_end_clean();
+    error_log("Utilisateur non connecté, redirection vers login.php");
     header('Location: /auth/login.php');
     exit;
 }
@@ -18,9 +28,12 @@ if (!Session::isLoggedIn()) {
 // Récupérer l'ID de la partie depuis l'URL
 $game_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
+error_log("board.php appelé avec l'ID de partie: " . $game_id);
+
 if (!$game_id) {
     // Nettoyer le buffer avant de rediriger
     ob_end_clean();
+    error_log("ID de partie non spécifié, redirection vers play.php");
     header('Location: /game/play.php');
     exit;
 }
@@ -29,12 +42,16 @@ if (!$game_id) {
 $gameController = new GameController();
 $gameData = $gameController->getGame($game_id);
 
+error_log("Résultat de getGame pour l'ID " . $game_id . ": " . json_encode($gameData));
+
 // Vérifier si la partie existe et si l'utilisateur est autorisé à y accéder
 if (!$gameData['success'] || 
     ($gameData['game']['player1_id'] != Session::getUserId() && 
-     $gameData['game']['player2_id'] != Session::getUserId())) {
+     $gameData['game']['player2_id'] != Session::getUserId() && 
+     $gameData['game']['player2_id'] != 0)) {
     // Nettoyer le buffer avant de rediriger
     ob_end_clean();
+    error_log("Partie inexistante ou utilisateur non autorisé, redirection vers play.php");
     header('Location: /game/play.php');
     exit;
 }
@@ -56,113 +73,149 @@ $opponentIsBot = $opponentId === 0; // ID 0 indique un bot
 $boardState = json_decode($gameData['game']['board_state'], true);
 
 $pageTitle = "Partie #" . $game_id . " - " . APP_NAME;
+
+// Tout semble bien, continuer avec l'affichage de la page
 ?>
 
 <?php include __DIR__ . '/../../backend/includes/header.php'; ?>
 
-<div class="container mx-auto px-4 py-8">
-    <div class="flex flex-col md:flex-row gap-8">
-        <!-- Panneau d'information -->
-        <div class="w-full md:w-1/4">
-            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-                <h2 class="text-xl font-bold text-indigo-600 mb-4">Informations</h2>
+<link rel="stylesheet" href="/assets/css/style.css">
+
+<div class="container mx-auto px-4 py-8 max-w-6xl">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <!-- Colonne d'informations -->
+        <div class="md:col-span-1">
+            <div class="bg-white shadow-md rounded-lg p-6 mb-6">
+                <h2 class="text-xl font-bold text-indigo-700 mb-4">Informations</h2>
                 
-                <div class="mb-4">
-                    <h3 class="font-semibold text-gray-700">Partie #<?php echo $game_id; ?></h3>
-                    <p class="text-gray-600">
-                        Statut: 
-                        <span class="font-medium <?php 
-                            echo $gameData['game']['status'] === 'in_progress' ? 'text-green-600' : 
-                                 ($gameData['game']['status'] === 'finished' ? 'text-red-600' : 'text-yellow-600'); 
-                        ?>">
-                            <?php 
-                                echo $gameData['game']['status'] === 'in_progress' ? 'En cours' : 
-                                     ($gameData['game']['status'] === 'finished' ? 'Terminée' : 'En attente'); 
-                            ?>
-                        </span>
-                    </p>
-                </div>
-                
-                <div class="mb-4">
-                    <h3 class="font-semibold text-gray-700">Joueurs</h3>
-                    <div class="flex items-center justify-between mt-2 p-2 bg-indigo-50 rounded">
-                        <span class="flex items-center">
-                            <span class="w-4 h-4 bg-black rounded-full mr-2"></span>
-                            <span class="font-medium"><?php echo $isPlayer1 ? 'Vous' : ($opponentIsBot ? 'IA' : 'Adversaire'); ?></span>
-                        </span>
-                        <span class="text-xs bg-indigo-200 px-2 py-1 rounded">Joueur 1</span>
+                <div class="space-y-4">
+                    <div>
+                        <p class="text-gray-700">Partie #<?php echo $game_id; ?></p>
+                        <p class="text-gray-700">Statut: <span class="font-semibold <?php echo $gameData['game']['status'] === 'in_progress' ? 'text-green-600' : 'text-red-600'; ?>">
+                            <?php echo $gameData['game']['status'] === 'in_progress' ? 'En cours' : 'Terminée'; ?>
+                        </span></p>
                     </div>
-                    <div class="flex items-center justify-between mt-2 p-2 bg-indigo-50 rounded">
-                        <span class="flex items-center">
-                            <span class="w-4 h-4 bg-white border border-gray-300 rounded-full mr-2"></span>
-                            <span class="font-medium"><?php echo !$isPlayer1 ? 'Vous' : ($opponentIsBot ? 'IA' : 'Adversaire'); ?></span>
-                        </span>
-                        <span class="text-xs bg-indigo-200 px-2 py-1 rounded">Joueur 2</span>
+                    
+                    <div>
+                        <h3 class="text-lg font-semibold text-indigo-600 mb-2">Joueurs</h3>
+                        <div class="flex items-center mb-2 bg-gray-100 rounded-lg p-2">
+                            <div class="w-8 h-8 rounded-full flex items-center justify-center bg-black mr-2">
+                                <div class="w-6 h-6 rounded-full bg-black border-2 border-white"></div>
+                            </div>
+                            <span class="font-medium <?php echo $isPlayer1 ? 'text-indigo-700' : 'text-gray-700'; ?>">
+                                <?php echo htmlspecialchars($gameData['game']['player1_name']); ?>
+                            </span>
+                            <span class="ml-2 px-2 py-1 text-xs rounded bg-indigo-100 text-indigo-800">
+                                Joueur 1
+                            </span>
+                        </div>
+                        
+                        <div class="flex items-center bg-gray-100 rounded-lg p-2">
+                            <div class="w-8 h-8 rounded-full flex items-center justify-center bg-white border border-gray-300 mr-2">
+                                <div class="w-6 h-6 rounded-full bg-white border-2 border-gray-300"></div>
+                            </div>
+                            <span class="font-medium <?php echo !$isPlayer1 ? 'text-indigo-700' : 'text-gray-700'; ?>">
+                                <?php echo htmlspecialchars($gameData['game']['player2_name']); ?>
+                            </span>
+                            <span class="ml-2 px-2 py-1 text-xs rounded bg-indigo-100 text-indigo-800">
+                                <?php echo $opponentIsBot ? 'IA' : 'Joueur 2'; ?>
+                            </span>
+                        </div>
                     </div>
-                </div>
-                
-                <div id="game-status" class="mb-4">
-                    <h3 class="font-semibold text-gray-700">Tour actuel</h3>
-                    <p class="mt-2 p-2 bg-indigo-50 rounded text-center font-medium">
-                        <?php if ($gameData['game']['status'] === 'finished'): ?>
-                            Partie terminée
-                        <?php else: ?>
+                    
+                    <div class="p-4 rounded-lg <?php echo $isUserTurn ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'; ?>">
+                        <h3 class="text-lg font-semibold mb-1">Tour actuel</h3>
+                        <p class="font-medium">
                             <?php if ($isUserTurn): ?>
-                                <span class="text-green-600">À vous de jouer</span>
+                                <span class="text-green-600 font-bold">À vous de jouer</span>
                             <?php else: ?>
-                                <span class="text-orange-600">Au tour de l'adversaire</span>
+                                En attente de l'adversaire
                             <?php endif; ?>
-                        <?php endif; ?>
-                    </p>
+                        </p>
+                    </div>
                 </div>
             </div>
             
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <h2 class="text-xl font-bold text-indigo-600 mb-4">Actions</h2>
+            <!-- Actions possibles -->
+            <div class="bg-white shadow-md rounded-lg p-6">
+                <h2 class="text-xl font-bold text-indigo-700 mb-4">Actions</h2>
                 
                 <div class="space-y-3">
-                    <a href="/game/play.php" class="block w-full py-2 px-4 bg-indigo-100 text-indigo-700 text-center rounded hover:bg-indigo-200 transition">
+                    <a href="/game/play.php" class="block w-full text-center py-3 px-4 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg transition duration-200">
                         Retour à mes parties
                     </a>
-                    <?php if ($gameData['game']['status'] !== 'finished'): ?>
-                        <button id="resign-button" class="block w-full py-2 px-4 bg-red-100 text-red-700 text-center rounded hover:bg-red-200 transition">
-                            Abandonner la partie
-                        </button>
-                    <?php endif; ?>
+                    
+                    <button id="abandonBtn" class="block w-full text-center py-3 px-4 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition duration-200">
+                        Abandonner la partie
+                    </button>
                 </div>
             </div>
         </div>
         
         <!-- Plateau de jeu -->
-        <div class="w-full md:w-3/4">
-            <div class="bg-white rounded-lg shadow-md p-6" id="game-container">
-                <h2 class="text-xl font-bold text-indigo-600 mb-4">Plateau de jeu</h2>
+        <div class="md:col-span-2">
+            <div class="bg-white shadow-md rounded-lg p-6">
+                <h2 class="text-xl font-bold text-indigo-700 mb-4">Plateau de jeu</h2>
                 
-                <div class="mb-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-700" id="game-message">
-                    <?php if ($gameData['game']['status'] === 'finished'): ?>
-                        La partie est terminée. 
-                        <?php if ($gameData['game']['winner_id'] == $currentUserId): ?>
-                            Vous avez gagné !
-                        <?php elseif ($gameData['game']['winner_id'] == null): ?>
-                            Match nul !
-                        <?php else: ?>
-                            Vous avez perdu.
-                        <?php endif; ?>
-                    <?php else: ?>
-                        <?php if ($isUserTurn): ?>
-                            C'est à votre tour. Sélectionnez une pièce pour la déplacer.
-                        <?php else: ?>
-                            C'est au tour de l'adversaire. Veuillez patienter...
-                        <?php endif; ?>
-                    <?php endif; ?>
-                </div>
+                <?php if ($gameData['game']['status'] === 'in_progress'): ?>
+                    <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6 rounded-r-lg">
+                        <p class="font-medium">
+                            <?php if ($isUserTurn): ?>
+                                C'est à votre tour. Sélectionnez une pièce pour la déplacer.
+                            <?php else: ?>
+                                Attendez votre tour. Votre adversaire réfléchit...
+                            <?php endif; ?>
+                        </p>
+                    </div>
+                <?php else: ?>
+                    <div class="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-6 rounded-r-lg">
+                        <p class="font-medium">
+                            <?php if ($gameData['game']['winner_id'] == $currentUserId): ?>
+                                Félicitations ! Vous avez gagné cette partie.
+                            <?php elseif ($gameData['game']['winner_id'] == null): ?>
+                                La partie s'est terminée par un match nul.
+                            <?php else: ?>
+                                Vous avez perdu cette partie. Meilleure chance la prochaine fois !
+                            <?php endif; ?>
+                        </p>
+                    </div>
+                <?php endif; ?>
                 
-                <!-- Plateau de jeu -->
-                <div class="relative mx-auto" style="width: 100%; max-width: 640px;">
-                    <div class="aspect-w-1 aspect-h-1 w-full">
-                        <div id="checkerboard" class="grid grid-cols-8 grid-rows-8 border-2 border-gray-800 select-none">
-                            <!-- Le plateau sera généré par JavaScript -->
-                        </div>
+                <!-- Plateau centré avec une taille fixe -->
+                <div class="flex justify-center items-center">
+                    <div id="board" class="relative border-4 border-gray-800 rounded-md shadow-lg" style="width: 480px; height: 480px;">
+                        <?php for ($row = 0; $row < 8; $row++): ?>
+                            <?php for ($col = 0; $col < 8; $col++): ?>
+                                <div class="absolute cell" style="width: 60px; height: 60px; top: <?php echo $row * 60; ?>px; left: <?php echo $col * 60; ?>px; background-color: <?php echo ($row + $col) % 2 === 0 ? '#f0f0f0' : '#1e3a5f'; ?>;"
+                                     data-row="<?php echo $row; ?>" data-col="<?php echo $col; ?>">
+                                    
+                                    <?php if (isset($boardState[$row][$col]) && $boardState[$row][$col] !== null): ?>
+                                        <?php 
+                                        $piece = $boardState[$row][$col];
+                                        $is_player_piece = ($piece['player'] == 1 && $isPlayer1) || ($piece['player'] == 2 && !$isPlayer1);
+                                        $piece_color = $piece['player'] == 1 ? 'black' : 'white';
+                                        $border_color = $piece['player'] == 1 ? 'border-gray-300' : 'border-gray-400';
+                                        $is_king = isset($piece['type']) && $piece['type'] === 'king';
+                                        ?>
+                                        
+                                        <div class="piece absolute inset-0 flex items-center justify-center cursor-<?php echo ($is_player_piece && $isUserTurn) ? 'pointer' : 'default'; ?>"
+                                            data-row="<?php echo $row; ?>" 
+                                            data-col="<?php echo $col; ?>" 
+                                            data-player="<?php echo $piece['player']; ?>"
+                                            data-king="<?php echo $is_king ? 'true' : 'false'; ?>">
+                                            <div class="w-12 h-12 rounded-full <?php echo $piece_color == 'black' ? 'bg-black' : 'bg-white border-2 '.$border_color; ?> shadow-md flex items-center justify-center">
+                                                <?php if ($is_king): ?>
+                                                    <div class="text-<?php echo $piece_color == 'black' ? 'yellow-400' : 'yellow-600'; ?> text-2xl font-bold">♛</div>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endfor; ?>
+                        <?php endfor; ?>
+                        
+                        <!-- Les indicateurs de mouvement seront ajoutés ici dynamiquement par JavaScript -->
+                        <div id="moveIndicators"></div>
                     </div>
                 </div>
             </div>
@@ -170,371 +223,415 @@ $pageTitle = "Partie #" . $game_id . " - " . APP_NAME;
     </div>
 </div>
 
+<!-- Modal de confirmation pour abandonner -->
+<div id="abandonModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+        <h3 class="text-xl font-bold text-red-600 mb-4">Abandonner la partie</h3>
+        <p class="text-gray-700 mb-6">Êtes-vous sûr de vouloir abandonner cette partie ? Cette action est irréversible et vous serez considéré comme perdant.</p>
+        <div class="flex justify-end space-x-4">
+            <button id="cancelAbandon" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition">Annuler</button>
+            <button id="confirmAbandon" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition">Abandonner</button>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Données du jeu
-    const gameId = <?php echo $game_id; ?>;
-    const isUserTurn = <?php echo $isUserTurn ? 'true' : 'false'; ?>;
-    const isPlayer1 = <?php echo $isPlayer1 ? 'true' : 'false'; ?>;
-    const gameStatus = "<?php echo $gameData['game']['status']; ?>";
-    const opponentIsBot = <?php echo $opponentIsBot ? 'true' : 'false'; ?>;
-    let boardState = <?php echo $gameData['game']['board_state']; ?>;
+    console.log("Le DOM est chargé et prêt pour les interactions !");
+    
+    const board = document.getElementById('board');
+    const moveIndicators = document.getElementById('moveIndicators');
     let selectedPiece = null;
     let possibleMoves = [];
+    const game_id = <?php echo $game_id; ?>;
+    const isUserTurn = <?php echo $isUserTurn ? 'true' : 'false'; ?>;
+    const gameStatus = "<?php echo $gameData['game']['status']; ?>";
+    const currentPlayer = <?php echo $gameData['game']['current_player']; ?>;
+    const userPlayer = <?php echo $isPlayer1 ? 1 : 2; ?>;
     
-    // Éléments DOM
-    const checkerboard = document.getElementById('checkerboard');
-    const gameMessage = document.getElementById('game-message');
-    const gameStatus_el = document.getElementById('game-status');
-    const resignButton = document.getElementById('resign-button');
+    console.log("État du jeu:", {
+        game_id: game_id,
+        isUserTurn: isUserTurn,
+        gameStatus: gameStatus,
+        currentPlayer: currentPlayer,
+        userPlayer: userPlayer
+    });
     
-    // Fonction pour initialiser le plateau
-    function initBoard() {
-        checkerboard.innerHTML = '';
+    // Mettre à jour l'état de la partie toutes les 5 secondes si ce n'est pas le tour du joueur
+    if (gameStatus === 'in_progress' && !isUserTurn) {
+        setInterval(checkGameStatus, 5000);
+    }
+    
+    // Ajouter les écouteurs d'événements aux pièces du joueur actuel
+    if (gameStatus === 'in_progress' && isUserTurn) {
+        const playerPieces = document.querySelectorAll(`.piece[data-player="${userPlayer}"]`);
+        console.log(`Nombre de pièces du joueur ${userPlayer} trouvées:`, playerPieces.length);
         
-        for (let row = 0; row < 8; row++) {
-            for (let col = 0; col < 8; col++) {
-                const isBlackSquare = (row + col) % 2 === 1;
-                const square = document.createElement('div');
-                square.className = `square ${isBlackSquare ? 'bg-gray-800' : 'bg-gray-200'} relative`;
-                square.dataset.row = row;
-                square.dataset.col = col;
-                
-                // Ajouter un événement de clic pour les cases
-                square.addEventListener('click', function() {
-                    handleSquareClick(row, col);
-                });
-                
-                checkerboard.appendChild(square);
-                
-                // Ajouter une pièce si nécessaire
-                if (isBlackSquare && boardState[row] && boardState[row][col]) {
-                    const piece = boardState[row][col];
-                    if (piece) {
-                        addPiece(row, col, piece.player, piece.type === 'king');
+        playerPieces.forEach(piece => {
+            piece.addEventListener('click', selectPiece);
+            
+            // Ajouter une classe visuelle pour montrer que la pièce est sélectionnable
+            piece.classList.add('selectable-piece');
+            
+            // Ajouter un effet de survol pour les pièces jouables
+            piece.addEventListener('mouseenter', function() {
+                this.classList.add('hover-effect');
+            });
+            
+            piece.addEventListener('mouseleave', function() {
+                this.classList.remove('hover-effect');
+            });
+            
+            console.log(`Pièce à la position [${piece.dataset.row},${piece.dataset.col}] prête pour le jeu`);
+        });
+    }
+    
+    // Fonctions pour la gestion des mouvements
+    function selectPiece(event) {
+        console.log("Pièce sélectionnée !");
+        if (!isUserTurn) {
+            console.log("Ce n'est pas votre tour !");
+            return;
+        }
+        
+        // Réinitialiser la pièce précédemment sélectionnée
+        if (selectedPiece) {
+            console.log("Réinitialisation de la pièce précédemment sélectionnée");
+            
+            // Enlever la classe de sélection de toutes les pièces
+            document.querySelectorAll('.piece').forEach(p => {
+                p.classList.remove('selected');
+            });
+            
+            const prevRow = parseInt(selectedPiece.dataset.row);
+            const prevCol = parseInt(selectedPiece.dataset.col);
+            const prevCell = document.querySelector(`.cell[data-row="${prevRow}"][data-col="${prevCol}"]`);
+            
+            if (prevCell) {
+                prevCell.style.backgroundColor = (prevRow + prevCol) % 2 === 0 ? '#f0f0f0' : '#1e3a5f';
+            }
+        }
+        
+        // Effacer les indicateurs de mouvement précédents
+        moveIndicators.innerHTML = '';
+        
+        // Obtenir l'élément HTML de la pièce
+        const piece = event.currentTarget;
+        
+        // Sélectionner la nouvelle pièce
+        const row = parseInt(piece.dataset.row);
+        const col = parseInt(piece.dataset.col);
+        const isKing = piece.dataset.king === 'true';
+        
+        console.log(`Nouvelle pièce sélectionnée: Position [${row},${col}], Roi: ${isKing}`);
+        
+        // Ajouter la classe de sélection
+        piece.classList.add('selected');
+        
+        // Afficher la case sélectionnée en surbrillance
+        const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+        if (cell) {
+            cell.style.backgroundColor = '#ffeb3b'; // Jaune pour la case sélectionnée
+        }
+        
+        selectedPiece = piece;
+        
+        // Calculer les mouvements possibles
+        calculatePossibleMoves(row, col, isKing);
+        
+        // Afficher les indicateurs de mouvement
+        showMoveIndicators();
+    }
+    
+    function calculatePossibleMoves(row, col, isKing) {
+        console.log(`Calcul des mouvements possibles pour la pièce à [${row},${col}]`);
+        possibleMoves = [];
+        
+        // Directions possibles dépendant du joueur
+        let directions = [];
+        if (userPlayer === 1) {
+            // Joueur 1 (noir) se déplace vers le bas
+            directions = isKing ? [{r: 1, c: -1}, {r: 1, c: 1}, {r: -1, c: -1}, {r: -1, c: 1}] : [{r: 1, c: -1}, {r: 1, c: 1}];
+        } else {
+            // Joueur 2 (blanc) se déplace vers le haut
+            directions = isKing ? [{r: -1, c: -1}, {r: -1, c: 1}, {r: 1, c: -1}, {r: 1, c: 1}] : [{r: -1, c: -1}, {r: -1, c: 1}];
+        }
+        
+        console.log("Directions possibles:", directions);
+        
+        // Vérifier chaque direction
+        directions.forEach(dir => {
+            const newRow = row + dir.r;
+            const newCol = col + dir.c;
+            
+            // Vérifier si la nouvelle position est dans les limites du plateau
+            if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                // Vérifier si la case est vide
+                const targetCell = document.querySelector(`.piece[data-row="${newRow}"][data-col="${newCol}"]`);
+                if (!targetCell) {
+                    possibleMoves.push({
+                        fromRow: row,
+                        fromCol: col,
+                        toRow: newRow,
+                        toCol: newCol,
+                        isCapture: false
+                    });
+                    console.log(`Mouvement simple possible vers [${newRow},${newCol}]`);
+                } else {
+                    // Vérifier une capture possible
+                    const piecePlayer = parseInt(targetCell.dataset.player);
+                    if (piecePlayer !== userPlayer) {
+                        const jumpRow = newRow + dir.r;
+                        const jumpCol = newCol + dir.c;
+                        
+                        // Vérifier si la case après la capture est dans les limites et vide
+                        if (jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
+                            const jumpCell = document.querySelector(`.piece[data-row="${jumpRow}"][data-col="${jumpCol}"]`);
+                            if (!jumpCell) {
+                                possibleMoves.push({
+                                    fromRow: row,
+                                    fromCol: col,
+                                    toRow: jumpRow,
+                                    toCol: jumpCol,
+                                    isCapture: true,
+                                    captureRow: newRow,
+                                    captureCol: newCol
+                                });
+                                console.log(`Capture possible vers [${jumpRow},${jumpCol}], en capturant [${newRow},${newCol}]`);
+                            }
+                        }
                     }
                 }
             }
-        }
+        });
+        
+        console.log(`Total des mouvements possibles: ${possibleMoves.length}`);
     }
     
-    // Fonction pour ajouter une pièce au plateau
-    function addPiece(row, col, player, isKing = false) {
-        const square = getSquare(row, col);
-        if (!square) return;
+    function showMoveIndicators() {
+        console.log("Affichage des indicateurs de mouvement");
         
-        const piece = document.createElement('div');
-        piece.className = `piece absolute inset-0 m-auto rounded-full border-2 ${player === 1 ? 'bg-black border-gray-600' : 'bg-white border-gray-300'} w-4/5 h-4/5 transform transition-transform`;
-        piece.dataset.player = player;
-        
-        // Ajouter une couronne pour les dames
-        if (isKing) {
-            const crown = document.createElement('div');
-            crown.className = `absolute inset-0 flex items-center justify-center text-${player === 1 ? 'white' : 'black'} font-bold text-lg`;
-            crown.textContent = '♔';
-            piece.appendChild(crown);
-        }
-        
-        square.appendChild(piece);
-    }
-    
-    // Fonction pour obtenir une case à partir des coordonnées
-    function getSquare(row, col) {
-        return document.querySelector(`.square[data-row="${row}"][data-col="${col}"]`);
-    }
-    
-    // Fonction pour gérer le clic sur une case
-    function handleSquareClick(row, col) {
-        // Si le jeu est terminé ou ce n'est pas le tour du joueur, ne rien faire
-        if (gameStatus === 'finished' || !isUserTurn) return;
-        
-        const square = getSquare(row, col);
-        const piece = square.querySelector('.piece');
-        
-        // Si aucune pièce n'est sélectionnée et qu'il y a une pièce sur la case
-        if (!selectedPiece && piece) {
-            const piecePlayer = parseInt(piece.dataset.player);
-            const isUserPiece = (isPlayer1 && piecePlayer === 1) || (!isPlayer1 && piecePlayer === 2);
+        possibleMoves.forEach(move => {
+            // Créer un indicateur de mouvement
+            const indicator = document.createElement('div');
+            indicator.className = 'move-indicator absolute flex items-center justify-center cursor-pointer';
+            indicator.style.width = '60px';
+            indicator.style.height = '60px';
+            indicator.style.top = `${move.toRow * 60}px`;
+            indicator.style.left = `${move.toCol * 60}px`;
+            indicator.style.backgroundColor = move.isCapture ? 'rgba(255, 0, 0, 0.3)' : 'rgba(0, 255, 0, 0.3)';
+            indicator.style.borderRadius = '50%';
+            indicator.style.zIndex = '10';
             
-            // Vérifier si c'est une pièce du joueur
-            if (isUserPiece) {
-                selectPiece(row, col);
-            }
-        } 
-        // Si une pièce est sélectionnée et que la case cliquée est une destination possible
-        else if (selectedPiece) {
-            const fromRow = parseInt(selectedPiece.dataset.row);
-            const fromCol = parseInt(selectedPiece.dataset.col);
+            // Ajouter une flèche pour indiquer la direction
+            const arrow = document.createElement('div');
+            arrow.innerHTML = '&#x2192;'; // Flèche droite
+            arrow.className = 'text-white text-3xl font-bold';
             
-            // Vérifier si c'est un mouvement valide
-            const validMove = possibleMoves.find(move => 
-                move.toRow === row && move.toCol === col
-            );
+            // Ajuster la rotation de la flèche selon la direction
+            const angle = Math.atan2(move.toRow - move.fromRow, move.toCol - move.fromCol) * (180 / Math.PI);
+            arrow.style.transform = `rotate(${angle}deg)`;
             
-            if (validMove) {
-                makeMove(fromRow, fromCol, row, col);
-            } else {
-                // Désélectionner si on clique ailleurs
-                unselectPiece();
-            }
-        }
-    }
-    
-    // Fonction pour sélectionner une pièce
-    function selectPiece(row, col) {
-        // Désélectionner la pièce précédente si elle existe
-        unselectPiece();
-        
-        const square = getSquare(row, col);
-        const piece = square.querySelector('.piece');
-        
-        // Marquer la pièce comme sélectionnée
-        piece.classList.add('ring-4', 'ring-yellow-400', 'scale-110', 'z-10');
-        selectedPiece = { element: piece, dataset: { row, col } };
-        
-        // Calculer et afficher les mouvements possibles
-        calculatePossibleMoves(row, col);
-    }
-    
-    // Fonction pour désélectionner une pièce
-    function unselectPiece() {
-        if (selectedPiece) {
-            selectedPiece.element.classList.remove('ring-4', 'ring-yellow-400', 'scale-110', 'z-10');
-            selectedPiece = null;
+            indicator.appendChild(arrow);
             
-            // Supprimer les indicateurs de mouvement possible
-            document.querySelectorAll('.move-indicator').forEach(indicator => {
-                indicator.remove();
+            // Ajouter l'écouteur d'événement pour effectuer le mouvement
+            indicator.addEventListener('click', () => {
+                console.log(`Clic sur l'indicateur pour déplacer vers [${move.toRow},${move.toCol}]`);
+                makeMove(move);
             });
             
-            possibleMoves = [];
-        }
+            moveIndicators.appendChild(indicator);
+        });
     }
     
-    // Fonction pour calculer les mouvements possibles
-    function calculatePossibleMoves(row, col) {
-        const piecePlayer = parseInt(selectedPiece.element.dataset.player);
-        const isKing = selectedPiece.element.querySelector('.crown') !== null;
+    function makeMove(move) {
+        console.log(`Tentative de déplacement de [${move.fromRow},${move.fromCol}] vers [${move.toRow},${move.toCol}]`);
         
-        // Direction du mouvement selon le joueur
-        const directions = isKing ? [
-            { dr: -1, dc: -1 }, { dr: -1, dc: 1 }, { dr: 1, dc: -1 }, { dr: 1, dc: 1 }
-        ] : (
-            piecePlayer === 1 ? 
-            [{ dr: 1, dc: -1 }, { dr: 1, dc: 1 }] :  // Pion noir (vers le bas)
-            [{ dr: -1, dc: -1 }, { dr: -1, dc: 1 }]  // Pion blanc (vers le haut)
-        );
+        // Afficher un indicateur visuel de progression
+        const loadingIndicator = document.createElement('div');
+        loadingIndicator.className = 'fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50';
+        loadingIndicator.innerHTML = '<div class="bg-white p-4 rounded-lg shadow-lg"><p class="text-lg font-bold">Déplacement en cours...</p></div>';
+        document.body.appendChild(loadingIndicator);
         
-        // Récupérer les mouvements possibles via l'API
-        fetch(`/api/game/status.php?game_id=${gameId}&check_moves=1&from_row=${row}&from_col=${col}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success && data.possible_moves) {
-                    possibleMoves = data.possible_moves;
-                    
-                    // Afficher les mouvements possibles
-                    possibleMoves.forEach(move => {
-                        const targetSquare = getSquare(move.toRow, move.toCol);
-                        const indicator = document.createElement('div');
-                        indicator.className = 'move-indicator absolute inset-0 m-auto w-1/4 h-1/4 bg-green-500 rounded-full opacity-60 z-5 cursor-pointer';
-                        targetSquare.appendChild(indicator);
-                    });
-                }
-            })
-            .catch(error => {
-                console.error('Erreur lors de la récupération des mouvements possibles:', error);
-            });
-    }
-    
-    // Fonction pour effectuer un mouvement
-    function makeMove(fromRow, fromCol, toRow, toCol) {
-        // Désactiver les interactions pendant l'envoi
-        document.body.classList.add('cursor-wait');
-        gameMessage.textContent = "Traitement de votre mouvement...";
-        
-        // Envoyer le mouvement au serveur
+        // Appeler l'API pour effectuer le mouvement
         fetch('/api/game/move.php', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                game_id: gameId,
-                from_row: fromRow,
-                from_col: fromCol,
-                to_row: toRow,
-                to_col: toCol
+                game_id: game_id,
+                from_row: move.fromRow,
+                from_col: move.fromCol,
+                to_row: move.toRow,
+                to_col: move.toCol
+            })
+        })
+        .then(response => {
+            console.log("Réponse reçue du serveur");
+            return response.json();
+        })
+        .then(data => {
+            console.log('Résultat du mouvement:', data);
+            
+            // Supprimer l'indicateur de chargement
+            document.body.removeChild(loadingIndicator);
+            
+            if (data.success) {
+                // Animation de succès avant l'actualisation
+                const successMessage = document.createElement('div');
+                successMessage.className = 'fixed inset-0 bg-green-500 bg-opacity-30 flex items-center justify-center z-50';
+                successMessage.innerHTML = '<div class="bg-white p-4 rounded-lg shadow-lg"><p class="text-lg font-bold text-green-600">Mouvement réussi!</p></div>';
+                document.body.appendChild(successMessage);
+                
+                // Attendre un peu avant d'actualiser la page
+                setTimeout(() => {
+                    // Actualiser la page pour afficher le nouvel état du plateau
+                    window.location.reload();
+                }, 500);
+            } else {
+                alert('Erreur lors du mouvement: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            
+            // Supprimer l'indicateur de chargement
+            document.body.removeChild(loadingIndicator);
+            
+            alert('Une erreur est survenue lors du mouvement.');
+        });
+    }
+    
+    function checkGameStatus() {
+        console.log("Vérification du statut de la partie...");
+        
+        fetch(`/api/game/status.php?game_id=${game_id}`)
+        .then(response => response.json())
+        .then(data => {
+            console.log('Statut de la partie:', data);
+            if (data.success && (data.game.current_player === userPlayer || data.game.status !== 'in_progress')) {
+                // Actualiser la page si c'est au tour du joueur ou si la partie est terminée
+                console.log("C'est à votre tour ou la partie est terminée, actualisation de la page");
+                window.location.reload();
+            }
+        })
+        .catch(error => {
+            console.error('Erreur lors de la vérification du statut:', error);
+        });
+    }
+    
+    // Gestion de l'abandon de partie
+    const abandonBtn = document.getElementById('abandonBtn');
+    const abandonModal = document.getElementById('abandonModal');
+    const cancelAbandon = document.getElementById('cancelAbandon');
+    const confirmAbandon = document.getElementById('confirmAbandon');
+    
+    abandonBtn.addEventListener('click', () => {
+        console.log("Ouverture du modal d'abandon");
+        abandonModal.classList.remove('hidden');
+    });
+    
+    cancelAbandon.addEventListener('click', () => {
+        console.log("Annulation de l'abandon");
+        abandonModal.classList.add('hidden');
+    });
+    
+    confirmAbandon.addEventListener('click', () => {
+        console.log("Confirmation de l'abandon");
+        
+        // Afficher un indicateur visuel de progression
+        const loadingIndicator = document.createElement('div');
+        loadingIndicator.className = 'fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50';
+        loadingIndicator.innerHTML = '<div class="bg-white p-4 rounded-lg shadow-lg"><p class="text-lg font-bold">Abandon en cours...</p></div>';
+        document.body.appendChild(loadingIndicator);
+        
+        // Appeler l'API pour abandonner la partie
+        fetch('/api/game/move.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                game_id: game_id,
+                resign: true
             })
         })
         .then(response => response.json())
         .then(data => {
+            console.log('Résultat de l\'abandon:', data);
+            
+            // Supprimer l'indicateur de chargement
+            document.body.removeChild(loadingIndicator);
+            
             if (data.success) {
-                // Mettre à jour le plateau
-                boardState = data.board_state;
-                updateBoard();
-                
-                // Mettre à jour les messages et statuts
-                gameMessage.textContent = data.message || "Mouvement effectué avec succès.";
-                
-                // Si c'est une partie contre un bot, attendre la réponse du bot
-                if (opponentIsBot && data.game_status === 'in_progress') {
-                    gameMessage.textContent = "L'IA réfléchit à son prochain coup...";
-                    
-                    // Attendre un peu puis récupérer l'état du jeu (mouvement du bot)
-                    setTimeout(() => {
-                        checkGameStatus();
-                    }, 1000);
-                }
-                
-                // Si le jeu est terminé
-                if (data.game_status === 'finished') {
-                    handleGameOver(data.winner_id);
-                }
+                // Rediriger vers la page des parties
+                window.location.href = '/game/play.php?message=' + encodeURIComponent('Vous avez abandonné la partie.');
             } else {
-                gameMessage.textContent = data.message || "Erreur lors de l'exécution du mouvement.";
-                unselectPiece();
+                alert('Erreur lors de l\'abandon: ' + data.message);
+                abandonModal.classList.add('hidden');
             }
         })
         .catch(error => {
-            console.error('Erreur lors de l\'envoi du mouvement:', error);
-            gameMessage.textContent = "Erreur de connexion. Veuillez réessayer.";
-            unselectPiece();
-        })
-        .finally(() => {
-            document.body.classList.remove('cursor-wait');
-        });
-    }
-    
-    // Fonction pour vérifier l'état du jeu
-    function checkGameStatus() {
-        fetch(`/api/game/status.php?game_id=${gameId}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Mettre à jour le plateau si nécessaire
-                    if (JSON.stringify(boardState) !== JSON.stringify(data.game.board_state)) {
-                        boardState = data.game.board_state;
-                        updateBoard();
-                    }
-                    
-                    // Mettre à jour le statut du tour
-                    const newIsUserTurn = (data.game.current_player === (isPlayer1 ? 1 : 2));
-                    if (newIsUserTurn !== isUserTurn) {
-                        gameStatus_el.innerHTML = `
-                            <h3 class="font-semibold text-gray-700">Tour actuel</h3>
-                            <p class="mt-2 p-2 bg-indigo-50 rounded text-center font-medium">
-                                <span class="text-green-600">À vous de jouer</span>
-                            </p>
-                        `;
-                        gameMessage.textContent = "C'est à votre tour. Sélectionnez une pièce pour la déplacer.";
-                        window.location.reload(); // Recharger pour mettre à jour tous les états
-                    }
-                    
-                    // Si le jeu est terminé
-                    if (data.game.status === 'finished') {
-                        handleGameOver(data.game.winner_id);
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Erreur lors de la vérification de l\'état du jeu:', error);
-            });
-    }
-    
-    // Fonction pour mettre à jour le plateau
-    function updateBoard() {
-        // Supprimer toutes les pièces
-        document.querySelectorAll('.piece').forEach(piece => {
-            piece.remove();
-        });
-        
-        // Ajouter les pièces selon l'état actuel
-        for (let row = 0; row < 8; row++) {
-            for (let col = 0; col < 8; col++) {
-                if (boardState[row] && boardState[row][col]) {
-                    const piece = boardState[row][col];
-                    if (piece) {
-                        addPiece(row, col, piece.player, piece.type === 'king');
-                    }
-                }
-            }
-        }
-        
-        // Désélectionner toute pièce
-        unselectPiece();
-    }
-    
-    // Fonction pour gérer la fin de partie
-    function handleGameOver(winnerId) {
-        const currentUserId = <?php echo $currentUserId; ?>;
-        
-        if (winnerId === currentUserId) {
-            gameMessage.textContent = "Félicitations ! Vous avez gagné la partie !";
-            gameMessage.className = "mb-4 p-3 bg-green-50 border-l-4 border-green-400 text-green-700";
-        } else if (winnerId === null) {
-            gameMessage.textContent = "La partie s'est terminée par un match nul.";
-            gameMessage.className = "mb-4 p-3 bg-blue-50 border-l-4 border-blue-400 text-blue-700";
-        } else {
-            gameMessage.textContent = "Vous avez perdu la partie.";
-            gameMessage.className = "mb-4 p-3 bg-red-50 border-l-4 border-red-400 text-red-700";
-        }
-        
-        gameStatus_el.innerHTML = `
-            <h3 class="font-semibold text-gray-700">Statut</h3>
-            <p class="mt-2 p-2 bg-indigo-50 rounded text-center font-medium">
-                <span class="text-red-600">Partie terminée</span>
-            </p>
-        `;
-    }
-    
-    // Fonction pour abandonner la partie
-    function resignGame() {
-        if (confirm("Êtes-vous sûr de vouloir abandonner cette partie ? Cette action est irréversible.")) {
-            fetch('/api/game/move.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    game_id: gameId,
-                    resign: true
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    window.location.reload();
-                } else {
-                    alert(data.message || "Erreur lors de l'abandon de la partie.");
-                }
-            })
-            .catch(error => {
-                console.error('Erreur lors de l\'abandon de la partie:', error);
-                alert("Erreur de connexion. Veuillez réessayer.");
-            });
-        }
-    }
-    
-    // Attacher l'événement au bouton d'abandon
-    if (resignButton) {
-        resignButton.addEventListener('click', resignGame);
-    }
-    
-    // Vérifier périodiquement l'état du jeu si ce n'est pas le tour de l'utilisateur
-    if (!isUserTurn && gameStatus === 'in_progress') {
-        const checkInterval = setInterval(() => {
-            checkGameStatus();
+            console.error('Erreur:', error);
             
-            // Arrêter la vérification si la page est fermée
-            window.addEventListener('beforeunload', () => {
-                clearInterval(checkInterval);
-            });
-        }, 5000); // Vérifier toutes les 5 secondes
-    }
+            // Supprimer l'indicateur de chargement
+            document.body.removeChild(loadingIndicator);
+            
+            alert('Une erreur est survenue lors de l\'abandon.');
+            abandonModal.classList.add('hidden');
+        });
+    });
     
-    // Initialiser le plateau
-    initBoard();
+    // Fermer le modal si on clique en dehors
+    abandonModal.addEventListener('click', (e) => {
+        if (e.target === abandonModal) {
+            abandonModal.classList.add('hidden');
+        }
+    });
+    
+    // Ajouter des gestionnaires d'erreurs globaux
+    window.addEventListener('error', function(e) {
+        console.error('Erreur JavaScript:', e.message, 'à', e.filename, ':', e.lineno);
+    });
 });
 </script>
+
+<style>
+.hover-effect {
+    transform: translateY(-5px) !important;
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.3) !important;
+    transition: all 0.2s ease;
+}
+
+.selected {
+    box-shadow: 0 0 0 3px #ffeb3b, 0 5px 10px rgba(0, 0, 0, 0.3) !important;
+}
+
+.selectable-piece {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.selectable-piece:hover {
+    transform: translateY(-3px);
+}
+
+.move-indicator {
+    animation: pulse 1.5s infinite;
+    transition: transform 0.2s ease;
+}
+
+.move-indicator:hover {
+    transform: scale(1.1);
+    animation: none;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.6; transform: scale(0.95); }
+    50% { opacity: 0.8; transform: scale(1.05); }
+    100% { opacity: 0.6; transform: scale(0.95); }
+}
+</style>
 
 <?php include __DIR__ . '/../../backend/includes/footer.php'; ?>

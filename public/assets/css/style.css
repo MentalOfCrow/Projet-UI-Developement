@@ -1,0 +1,176 @@
+/* Style amélioré pour le jeu de dames */
+
+/* Styles pour le plateau */
+#board {
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    border-radius: 8px !important;
+    overflow: hidden;
+    transform: scale(0.95); /* Légèrement réduit pour s'adapter à différents écrans */
+    transition: transform 0.3s ease;
+}
+
+#board:hover {
+    transform: scale(1);
+}
+
+/* Styles pour les pièces */
+.piece .w-12 {
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16);
+}
+
+.piece:hover .w-12 {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.22);
+}
+
+/* Style pour la pièce sélectionnée */
+.piece.selected .w-12 {
+    box-shadow: 0 0 0 3px #ffeb3b, 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Styles pour les indicateurs de mouvement */
+.move-indicator {
+    animation: pulse 1.5s infinite;
+    transition: all 0.2s ease;
+    z-index: 10;
+}
+
+.move-indicator:hover {
+    transform: scale(1.1);
+    animation: none;
+    opacity: 0.9 !important;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 0.6;
+        transform: scale(0.95);
+    }
+    50% {
+        opacity: 0.8;
+        transform: scale(1);
+    }
+    100% {
+        opacity: 0.6;
+        transform: scale(0.95);
+    }
+}
+
+/* Styles pour les cartes d'information */
+.bg-white.shadow-md {
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s ease;
+}
+
+.bg-white.shadow-md:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* Meilleurs styles pour les boutons */
+.block.w-full.text-center {
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.block.w-full.text-center:hover {
+    transform: translateY(-2px);
+}
+
+/* Animation pour le tour actuel */
+.bg-green-100 {
+    animation: highlight 2s infinite;
+}
+
+@keyframes highlight {
+    0% {
+        background-color: rgba(209, 250, 229, 0.8);
+    }
+    50% {
+        background-color: rgba(209, 250, 229, 1);
+    }
+    100% {
+        background-color: rgba(209, 250, 229, 0.8);
+    }
+}
+
+/* Style pour les couronnes des dames */
+.text-2xl.font-bold {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Style pour le modal d'abandon */
+#abandonModal .bg-white {
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    animation: modalAppear 0.3s ease;
+}
+
+@keyframes modalAppear {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Styles pour les pièces sélectionnables */
+.selectable-piece {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.selectable-piece:hover {
+    transform: translateY(-3px);
+    filter: brightness(1.1);
+}
+
+/* Effet de survol */
+.hover-effect {
+    transform: translateY(-5px) !important;
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.3) !important;
+    transition: all 0.2s ease;
+}
+
+/* Styles pour la liste des parties en cours */
+.divide-y.divide-gray-200 li {
+    transition: all 0.2s ease;
+}
+
+.divide-y.divide-gray-200 li:hover {
+    background-color: rgba(79, 70, 229, 0.05);
+}
+
+/* Style pour les tableaux de l'historique */
+table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+table tbody tr {
+    transition: all 0.2s ease;
+}
+
+table tbody tr:hover {
+    background-color: rgba(79, 70, 229, 0.05);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    #board {
+        transform: scale(0.8);
+        margin: 0 auto;
+    }
+    
+    #board:hover {
+        transform: scale(0.85);
+    }
+    
+    .selectable-piece:hover {
+        transform: translateY(-2px);
+    }
+}

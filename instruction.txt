@@ -1,0 +1,130 @@
+PROJET UF
+DÉVELOPEMENT
+MISE EN PRATIQUE
+Ce module va vous permettre de mettre en
+œuvre les compétences acquises dans les
+modules “Développement Logiciels” et “Base de
+données” en réalisant un projet concrète.
+INNOVATION
+Qu’il s’agisse d’un projet libre ou du serveur de
+matchmaking proposé, vous bénéficiez d’une
+totale liberté technologique pour explorer, créer
+et challenger vos compétences.
+Travailler en binôme favorise l’échange d’idées
+et le partage des connaissances, renforçant
+ainsi l’apprentissage collectif.
+COLLABORATION
+PROGRAMME
+02
+DÉROULÉ
+DU MODULE
+13
+UNE PHASE D’AUTONOMIE
+Permet d'
+avancer sur le développement de votre projet en dehors des séances,
+favorisant ainsi la prise d'initiative et l'
+organisation personnelle.
+UNE PHASE DE PRÉSENTIEL
+Profitez de la présence de l'
+encadrant pour poser vos questions, obtenir des retours
+et collaborer en équipe de manière synchronisée. Soit 5 séances en présentiel.
+PRÉSENTIEL & AUTONOMIE
+Le module alterne entre des moments d'
+accompagnement en présentiel et des périodes
+d'
+autonomie, assurant un équilibre optimal entre soutien collectif et travail individuel.
+03
+P
+R
+O
+J
+E
+T
+A
+U
+1
+C
+H
+O
+I
+X
+0
+4
+PROJET :
+SERVEUR DE MATCHMAKING
+Trois composantes : Serveur de matchmaking / Logiciel client / Base de données
+Modèle de données :
+File d'
+attente : stocke les informations (pseudo, IP, date d'
+entrée) de chaque joueur.
+Matchs : regroupe les données de communication, le plateau de jeu et l'état du match.
+Tours : conserve l'historique des coups et l'identité du joueur ayant joué.
+Fonctionnalités clés :
+Serveur :
+Gestion via sockets pour l'inscription en file, le démarrage, les tours et la fin de match.
+Surveillance continue de la file d'
+attente pour créer des matchs.
+Client :
+Interaction via sockets pour rejoindre la file, jouer et recevoir les coups.
+Intégration de la logique du jeu avec une interface graphique (IHM) ou en ligne de commande (CLI avec
+IA).
+Liberté de choix :
+Choix libre du jeu de plateau à tour par tour (ex : puissance 4, dames, morpion, etc...). 05
+PROJET : LIBRE
+Atteindre ou dépasser 28 points en degré de difficulté. Les fonctionnalités obligatoires totalisent 18 points, il
+vous faut donc ajouter des options supplémentaires d'
+une valeur minimale de 10 points.
+Fonctionnalités minimales obligatoires :
+Communication (Difficulté : 6)
+Établir une communication entre deux logiciels de votre création (machine-to-machine) ou intégrer des
+informations du monde physique (machine-to-reality).
+Base de données (Difficulté : 3)
+Connecter votre projet à une base de données avec au moins 3 tables.
+Algorithme avancé (Difficulté : 3)
+Intégrer au moins un algorithme avancé (génération, IA, analyse, etc.).
+Interaction utilisateur (Difficulté : 2)
+Offrir une interface interactive (bouton, champ texte, événement clavier/souris...).
+CRUD (Difficulté : 4)
+Implémenter un CRUD sur au moins une donnée essentielle au logiciel.
+06
+Étapes pour déposer votre proposition
+Lire le sujet
+Prenez connaissance de la grille d’évaluation et des critères du projet libre.
+Définir votre idée
+Brainstormez pour choisir un concept qui respecte les exigences (28 points de difficulté).
+Rédiger la proposition
+Préparez un document détaillé décrivant votre projet, les fonctionnalités envisagées et la répartition des
+tâches. Voir Moodle.
+Déposer sur Moodle
+Soumettez votre proposition via Moodle pour validation par les formateurs encadrants.
+Important : Date limite le 12/03 à 12h30.
+PROPOSITION :
+PROJET LIBRE
+07
+Pour ce module nous retrouvons plusieurs dates clé importantes. Liste des dates clé :
+Mardi 12 mars à 12h30 - Date limite pour proposer un projet & former les équipes.
+Jeudi 03 avril de 13h30 à 17h30 - Soutenance orale point d’avancement.
+Lundi 12 mai de 13h30 à 17h30 - Rendu & Soutenance orale finale du projet.
+LES DATES CLÉ
+DU MODULE
+08
+*Consultez le sujet pour obtenir plus de détails sur ces dates (déroulé, la grille d’évaluation, etc...)
+AVEZ-VOUS DES QUESTIONS ?
+09
+LES OBJECTIFS
+DE LA SÉANCE
+10
+OBJECTIFS
+11
+Objectifs de la séance du 10/03 :
+Consulter les projets en détails
+Examiner les différentes propositions pour bien comprendre les enjeux et identifier les demandes, dans
+l’objectif de sélectionner un projet.
+Proposer un projet (si besoin)
+Présenter votre idée de projet et la déposer sur Moodle pour la soumettre à validation.
+Former les équipes & remplir les équipes sur Moodle
+Organiser les groupes de travail et s’assurer que chaque membre est correctement inscrit sur Moodle.
+Brainstormer & commencer à mettre en place la gestion de projet
+Lancer une session de réflexion pour structurer le projet, définir les étapes clés et répartir les tâches entre les
+membres du groupe.
+C'EST PARTI !

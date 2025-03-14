@@ -71,6 +71,25 @@ class Database {
      * @return PDO Connexion PDO
      */
     public function getConnection() {
+        if (!isset($this->conn) || $this->conn === null) {
+            error_log("ALERTE: Tentative d'obtenir une connexion non initialisée dans Database");
+            // Tenter de réinitialiser la connexion
+            try {
+                $host = defined('DB_HOST') ? DB_HOST : "localhost";
+                $dbname = defined('DB_NAME') ? DB_NAME : "checkers_game";
+                $username = defined('DB_USER') ? DB_USER : "root";
+                $password = defined('DB_PASS') ? DB_PASS : "";
+                
+                $this->conn = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
+                $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                $this->conn->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+                $this->conn->exec("SET NAMES utf8");
+                
+                error_log("Connexion à la base de données réinitialisée avec succès");
+            } catch (PDOException $e) {
+                error_log("Échec de la réinitialisation de connexion à la base de données : " . $e->getMessage());
+            }
+        }
         return $this->conn;
     }
     

@@ -582,4 +582,337 @@ class GameController {
         // Le joueur n'a plus de mouvement possible
         return true;
     }
+    
+    /**
+     * Crée une partie contre un bot IA
+     * @param int $user_id ID de l'utilisateur qui joue contre le bot
+     * @return array Résultat de l'opération contenant le statut et l'ID de la partie
+     */
+    public function createBotGame($user_id) {
+        try {
+            // ID spécial pour le bot (valeur négative pour différencier des utilisateurs réels)
+            $bot_id = -1;
+            
+            // Initialiser le plateau
+            $board = $this->initializeBoard();
+            
+            // Déterminer qui commence aléatoirement
+            $first_player = (rand(0, 1) == 0) ? $user_id : $bot_id;
+            
+            // Préparer la requête SQL pour créer une partie
+            $query = "INSERT INTO games (player1_id, player2_id, current_player, status, board_state, created_at) 
+                      VALUES (:player1_id, :player2_id, :current_player, 'in_progress', :board_state, NOW())";
+            
+            $stmt = $this->db->prepare($query);
+            
+            // L'utilisateur humain est toujours player1
+            $stmt->bindParam(':player1_id', $user_id);
+            $stmt->bindParam(':player2_id', $bot_id);
+            $stmt->bindParam(':current_player', $first_player);
+            
+            // Corriger l'erreur en stockant le résultat de json_encode dans une variable
+            $boardJson = json_encode($board);
+            $stmt->bindParam(':board_state', $boardJson);
+            
+            if ($stmt->execute()) {
+                $game_id = $this->db->lastInsertId();
+                
+                // Si le bot commence, faire jouer le bot immédiatement
+                if ($first_player == $bot_id) {
+                    $this->makeBotMove($game_id);
+                }
+                
+                return [
+                    'success' => true,
+                    'message' => 'Partie contre bot créée avec succès',
+                    'game_id' => $game_id
+                ];
+            }
+            
+            return [
+                'success' => false,
+                'message' => 'Erreur lors de la création de la partie contre le bot'
+            ];
+            
+        } catch (PDOException $e) {
+            return [
+                'success' => false,
+                'message' => 'Erreur de base de données: ' . $e->getMessage()
+            ];
+        }
+    }
+    
+    /**
+     * Termine une partie et déclare un gagnant
+     * @param int $game_id ID de la partie
+     * @param int $winner_id ID du joueur gagnant
+     * @return bool Succès de l'opération
+     */
+    public function endGame($game_id, $winner_id) {
+        try {
+            $query = "UPDATE games SET 
+                     status = 'finished', 
+                     winner_id = :winner_id,
+                     updated_at = NOW()
+                     WHERE id = :game_id";
+            
+            $stmt = $this->db->prepare($query);
+            $stmt->bindParam(':winner_id', $winner_id);
+            $stmt->bindParam(':game_id', $game_id);
+            
+            return $stmt->execute();
+            
+        } catch (Exception $e) {
+            error_log("Erreur lors de la fin de partie: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Enregistre un mouvement dans la base de données
+     * @param int $game_id ID de la partie
+     * @param int $user_id ID du joueur qui a fait le mouvement
+     * @param int $fromRow Ligne de départ
+     * @param int $fromCol Colonne de départ
+     * @param int $toRow Ligne d'arrivée
+     * @param int $toCol Colonne d'arrivée
+     * @param bool $captured Indique si une pièce a été capturée
+     * @return bool Succès de l'opération
+     */
+    public function recordMove($game_id, $user_id, $fromRow, $fromCol, $toRow, $toCol, $captured) {
+        try {
+            $query = "INSERT INTO moves (game_id, user_id, from_position, to_position, captured, move_time) 
+                      VALUES (:game_id, :user_id, :from_position, :to_position, :captured, NOW())";
+            
+            $stmt = $this->db->prepare($query);
+            
+            $from_position = $fromRow . ',' . $fromCol;
+            $to_position = $toRow . ',' . $toCol;
+            $captured_val = $captured ? 1 : 0;
+            
+            $stmt->bindParam(':game_id', $game_id);
+            $stmt->bindParam(':user_id', $user_id);
+            $stmt->bindParam(':from_position', $from_position);
+            $stmt->bindParam(':to_position', $to_position);
+            $stmt->bindParam(':captured', $captured_val);
+            
+            return $stmt->execute();
+            
+        } catch (Exception $e) {
+            error_log("Erreur lors de l'enregistrement du mouvement: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Fait jouer le bot dans une partie
+     * @param int $game_id ID de la partie
+     * @return bool Succès de l'opération
+     */
+    private function makeBotMove($game_id) {
+        try {
+            // Récupérer l'état du jeu directement de la base de données au lieu d'utiliser getGame()
+            $query = "SELECT g.*, 
+                     u1.username as player1_name 
+                     FROM games g
+                     LEFT JOIN users u1 ON g.player1_id = u1.id
+                     WHERE g.id = :game_id";
+            
+            $stmt = $this->db->prepare($query);
+            $stmt->bindParam(':game_id', $game_id, PDO::PARAM_INT);
+            $stmt->execute();
+            
+            if ($stmt->rowCount() === 0) {
+                error_log("makeBotMove: Partie non trouvée - ID: " . $game_id);
+                return false;
+            }
+            
+            $game = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Vérifier que les données nécessaires sont présentes
+            if (!isset($game['player1_id']) || !isset($game['player2_id']) || 
+                !isset($game['current_player']) || !isset($game['board_state'])) {
+                error_log("makeBotMove: Données incomplètes pour la partie ID: " . $game_id);
+                return false;
+            }
+            
+            // Si ce n'est pas le tour du bot, ne rien faire
+            if ($game['current_player'] != $game['player2_id']) {
+                error_log("makeBotMove: Ce n'est pas le tour du bot - ID: " . $game_id);
+                return false;
+            }
+            
+            // Décoder l'état du plateau
+            $board = json_decode($game['board_state'], true);
+            if (!$board) {
+                error_log("makeBotMove: Impossible de décoder l'état du plateau - ID: " . $game_id);
+                return false;
+            }
+            
+            // Trouver tous les mouvements possibles pour le bot
+            $possibleMoves = $this->findAllPossibleMoves($board, 2); // 2 représente le joueur 2 (bot)
+            
+            if (empty($possibleMoves)) {
+                // Aucun mouvement possible, le bot a perdu
+                error_log("makeBotMove: Aucun mouvement possible pour le bot - ID: " . $game_id);
+                return $this->endGame($game_id, $game['player1_id']);
+            }
+            
+            // Choisir un mouvement aléatoire parmi les mouvements possibles
+            $randomMove = $possibleMoves[array_rand($possibleMoves)];
+            
+            // Appliquer le mouvement
+            $fromRow = $randomMove['fromRow'];
+            $fromCol = $randomMove['fromCol'];
+            $toRow = $randomMove['toRow'];
+            $toCol = $randomMove['toCol'];
+            
+            error_log("makeBotMove: Mouvement choisi - De: $fromRow,$fromCol À: $toRow,$toCol");
+            
+            // Vérifier si le mouvement est valide
+            $validMove = $this->isValidMove($board, $fromRow, $fromCol, $toRow, $toCol, 2);
+            
+            if (!$validMove || !isset($validMove['valid']) || !$validMove['valid']) {
+                error_log("makeBotMove: Mouvement invalide - ID: " . $game_id);
+                return false;
+            }
+            
+            // Stocker la valeur captured dans une variable avant de la passer par référence
+            $captured = isset($validMove['captured']) ? $validMove['captured'] : false;
+            
+            // Appliquer le mouvement sur le plateau
+            $board = $this->moveChecker($board, $fromRow, $fromCol, $toRow, $toCol, 2, $validMove);
+            
+            // Vérifier si le jeu est terminé après ce mouvement
+            $gameOver = $this->checkGameOver($board, 1); // 1 représente le joueur 1 (humain, prochain à jouer)
+            
+            // Mettre à jour l'état du jeu dans la base de données
+            $stmt = $this->db->prepare("UPDATE games SET 
+                board_state = :board, 
+                current_player = :next_player,
+                status = :status,
+                winner_id = :winner_id,
+                updated_at = NOW()
+                WHERE id = :game_id");
+            
+            $boardJson = json_encode($board);
+            $nextPlayer = $gameOver ? null : $game['player1_id']; // Si le jeu est terminé, pas de joueur suivant
+            $status = $gameOver ? 'finished' : 'in_progress';
+            $winnerId = $gameOver ? $game['player2_id'] : null; // Si le jeu est terminé, le bot a gagné
+            
+            $stmt->bindParam(':board', $boardJson);
+            $stmt->bindParam(':next_player', $nextPlayer);
+            $stmt->bindParam(':status', $status);
+            $stmt->bindParam(':winner_id', $winnerId);
+            $stmt->bindParam(':game_id', $game_id);
+            $stmt->execute();
+            
+            // Enregistrer le mouvement dans la base de données
+            $this->recordMove($game_id, $game['player2_id'], $fromRow, $fromCol, $toRow, $toCol, $captured);
+            
+            error_log("makeBotMove: Mouvement du bot réussi - ID: " . $game_id);
+            return true;
+        } catch (Exception $e) {
+            error_log('Erreur lors du mouvement du bot: ' . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Trouve tous les mouvements possibles pour un joueur
+     * @param array $board État du plateau
+     * @param int $player Joueur (1 ou 2)
+     * @return array Liste des mouvements possibles
+     */
+    private function findAllPossibleMoves($board, $player) {
+        // Vérifier que le tableau est bien formé
+        if (!is_array($board)) {
+            error_log("findAllPossibleMoves: Le plateau n'est pas un tableau valide");
+            return [];
+        }
+        
+        $possibleMoves = [];
+        
+        // Parcourir le plateau
+        for ($row = 0; $row < 8; $row++) {
+            if (!isset($board[$row]) || !is_array($board[$row])) {
+                continue;
+            }
+            
+            for ($col = 0; $col < 8; $col++) {
+                if (!isset($board[$row][$col])) {
+                    continue;
+                }
+                
+                // Vérifier si la case contient une pièce du joueur
+                if (is_array($board[$row][$col]) && 
+                    isset($board[$row][$col]['player']) && 
+                    $board[$row][$col]['player'] == $player) {
+                    
+                    // Vérifier si la pièce a un type
+                    $pieceType = isset($board[$row][$col]['type']) ? $board[$row][$col]['type'] : 'pawn';
+                    
+                    // Directions pour les mouvements
+                    $directions = [];
+                    
+                    if ($pieceType == 'pawn') {
+                        // Directions pour les pions (dépendent du joueur)
+                        if ($player == 1) {
+                            $directions = [[1, -1], [1, 1]]; // Vers le bas pour joueur 1 (pions noirs)
+                        } else {
+                            $directions = [[-1, -1], [-1, 1]]; // Vers le haut pour joueur 2 (pions blancs)
+                        }
+                    } else {
+                        // Directions pour les dames (toutes les directions)
+                        $directions = [[1, -1], [1, 1], [-1, -1], [-1, 1]];
+                    }
+                    
+                    // Vérifier les mouvements simples (1 case)
+                    foreach ($directions as $dir) {
+                        $newRow = $row + $dir[0];
+                        $newCol = $col + $dir[1];
+                        
+                        // Vérifier que la destination est dans les limites du plateau
+                        if ($newRow >= 0 && $newRow < 8 && $newCol >= 0 && $newCol < 8) {
+                            // Vérifier si la case est vide
+                            if (!isset($board[$newRow][$newCol]) || $board[$newRow][$newCol] === null) {
+                                $possibleMoves[] = [
+                                    'fromRow' => $row,
+                                    'fromCol' => $col,
+                                    'toRow' => $newRow,
+                                    'toCol' => $newCol
+                                ];
+                            } 
+                            // Si la case est occupée, vérifier s'il est possible de capturer
+                            else if (isset($board[$newRow][$newCol]['player']) && 
+                                     $board[$newRow][$newCol]['player'] != $player) {
+                                
+                                // Position après la capture
+                                $jumpRow = $newRow + $dir[0];
+                                $jumpCol = $newCol + $dir[1];
+                                
+                                // Vérifier que la destination après la capture est dans les limites
+                                if ($jumpRow >= 0 && $jumpRow < 8 && $jumpCol >= 0 && $jumpCol < 8) {
+                                    // Vérifier si la case est vide
+                                    if (!isset($board[$jumpRow][$jumpCol]) || $board[$jumpRow][$jumpCol] === null) {
+                                        $possibleMoves[] = [
+                                            'fromRow' => $row,
+                                            'fromCol' => $col,
+                                            'toRow' => $jumpRow,
+                                            'toCol' => $jumpCol,
+                                            'capture' => true,
+                                            'captureRow' => $newRow,
+                                            'captureCol' => $newCol
+                                        ];
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return $possibleMoves;
+    }
 }

@@ -1,0 +1,73 @@
+<?php
+// Activer la mise en tampon de sortie
+ob_start();
+
+// Activer l'affichage des erreurs en développement
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+// Enregistrer toutes les erreurs dans un fichier log
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/../../../backend/logs/php_errors.log');
+
+require_once __DIR__ . '/../../../backend/includes/config.php';
+require_once __DIR__ . '/../../../backend/controllers/GameController.php';
+require_once __DIR__ . '/../../../backend/includes/session.php';
+
+// Vérifier si l'utilisateur est connecté
+if (!Session::isLoggedIn()) {
+    // Nettoyer le tampon avant d'envoyer l'en-tête et les données JSON
+    ob_end_clean();
+    
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'message' => 'Vous devez être connecté pour accéder à cette fonctionnalité.'
+    ]);
+    exit;
+}
+
+// Log pour débogage
+error_log("API create_bot_game.php appelée par l'utilisateur ID: " . Session::getUserId());
+
+// Récupérer l'ID de l'utilisateur
+$user_id = Session::getUserId();
+
+try {
+    // Créer une instance de GameController
+    $gameController = new GameController();
+    
+    // Log pour débogage
+    error_log("Création d'une partie contre un bot pour l'utilisateur ID: " . $user_id);
+    
+    // Créer une partie contre un bot
+    $result = $gameController->createBotGame($user_id);
+    
+    // Log du résultat
+    error_log("Résultat de createBotGame: " . json_encode($result));
+    
+    // Nettoyer le tampon avant d'envoyer l'en-tête et les données JSON
+    ob_end_clean();
+    
+    // Retourner le résultat en JSON
+    header('Content-Type: application/json');
+    echo json_encode($result);
+} catch (Exception $e) {
+    // En cas d'erreur, retourner un message d'erreur détaillé
+    error_log("Erreur dans create_bot_game.php: " . $e->getMessage());
+    error_log("Trace: " . $e->getTraceAsString());
+    
+    // Nettoyer le tampon avant d'envoyer l'en-tête et les données JSON
+    ob_end_clean();
+    
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'message' => 'Erreur serveur: ' . $e->getMessage(),
+        'trace' => $e->getTraceAsString(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine()
+    ]);
+}
+exit; 

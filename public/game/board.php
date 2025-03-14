@@ -1,219 +1,168 @@
 <?php
+// Supprimer tout output buffering existant et en démarrer un nouveau
+while (ob_get_level()) ob_end_clean();
+ob_start();
+
 require_once __DIR__ . '/../../backend/includes/config.php';
 require_once __DIR__ . '/../../backend/controllers/GameController.php';
-require_once __DIR__ . '/../../backend/controllers/AuthController.php';
 require_once __DIR__ . '/../../backend/includes/session.php';
 
-// Vérifier si l'utilisateur est connecté
+// Rediriger si l'utilisateur n'est pas connecté
 if (!Session::isLoggedIn()) {
+    // Nettoyer le buffer avant de rediriger
+    ob_end_clean();
     header('Location: /auth/login.php');
-    exit();
+    exit;
 }
 
-// Vérifier si l'ID de la partie est fourni
-if (!isset($_GET['id']) || empty($_GET['id'])) {
+// Récupérer l'ID de la partie depuis l'URL
+$game_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+
+if (!$game_id) {
+    // Nettoyer le buffer avant de rediriger
+    ob_end_clean();
     header('Location: /game/play.php');
-    exit();
+    exit;
 }
 
-$gameId = intval($_GET['id']);
+// Récupérer les données de la partie
 $gameController = new GameController();
-$userId = Session::getUserId();
+$gameData = $gameController->getGame($game_id);
 
-// Récupérer les informations sur la partie
-$gameData = $gameController->getGameStatus(['game_id' => $gameId]);
-if (!$gameData['success']) {
+// Vérifier si la partie existe et si l'utilisateur est autorisé à y accéder
+if (!$gameData['success'] || 
+    ($gameData['game']['player1_id'] != Session::getUserId() && 
+     $gameData['game']['player2_id'] != Session::getUserId())) {
+    // Nettoyer le buffer avant de rediriger
+    ob_end_clean();
     header('Location: /game/play.php');
-    exit();
+    exit;
 }
 
-$game = $gameData['game'];
+// Déterminer si l'utilisateur est le joueur 1 ou 2
+$isPlayer1 = $gameData['game']['player1_id'] == Session::getUserId();
+$currentUserId = Session::getUserId();
+$user_number = $isPlayer1 ? 1 : 2;
+$opponent_number = $isPlayer1 ? 2 : 1;
 
-// Vérifier si l'utilisateur est l'un des joueurs
-if ($game['player1_id'] !== $userId && $game['player2_id'] !== $userId) {
-    header('Location: /game/play.php');
-    exit();
-}
+// Déterminer si c'est au tour de l'utilisateur
+$isUserTurn = $gameData['game']['current_player'] == $user_number;
 
-// Déterminer si c'est le tour du joueur actuel
-$isMyTurn = ($game['current_player'] == $userId);
-$myId = $userId;
-$opponentId = ($game['player1_id'] == $userId) ? $game['player2_id'] : $game['player1_id'];
-$myColor = ($game['player1_id'] == $userId) ? 'black' : 'white';
-$opponentColor = ($myColor == 'black') ? 'white' : 'black';
+// Récupérer les informations sur l'adversaire
+$opponentId = $isPlayer1 ? $gameData['game']['player2_id'] : $gameData['game']['player1_id'];
+$opponentIsBot = $opponentId === 0; // ID 0 indique un bot
 
-// Récupérer les noms des joueurs
-$authController = new AuthController();
-$player1 = $authController->getUserById($game['player1_id']);
-$player2 = $authController->getUserById($game['player2_id']);
-$player1_name = $player1 ? $player1->username : 'Joueur 1';
-$player2_name = $player2 ? $player2->username : 'Joueur 2';
+// Récupérer l'état du plateau
+$boardState = json_decode($gameData['game']['board_state'], true);
 
-// Décoder l'état du plateau
-$boardState = json_decode($game['board_state'], true);
-
-// Vérifier si la partie est terminée
-$isGameOver = ($game['status'] == 'finished');
-$isWinner = ($isGameOver && $game['winner_id'] == $userId);
-$isLoser = ($isGameOver && $game['winner_id'] == $opponentId);
-$isDraw = ($isGameOver && is_null($game['winner_id']));
-
-$pageTitle = "Partie #" . $gameId . " - " . APP_NAME;
+$pageTitle = "Partie #" . $game_id . " - " . APP_NAME;
 ?>
 
 <?php include __DIR__ . '/../../backend/includes/header.php'; ?>
 
 <div class="container mx-auto px-4 py-8">
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-bold text-indigo-600">Partie #<?php echo $gameId; ?></h1>
-        <div>
-            <a href="/game/play.php" class="text-indigo-600 hover:underline">← Retour</a>
-        </div>
-    </div>
-    
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <!-- Colonne de gauche: Informations sur la partie -->
-        <div class="lg:col-span-1">
-            <div class="bg-white rounded-lg shadow-md p-4 mb-6">
-                <h2 class="text-xl font-semibold text-gray-800 mb-4">Informations</h2>
+    <div class="flex flex-col md:flex-row gap-8">
+        <!-- Panneau d'information -->
+        <div class="w-full md:w-1/4">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-xl font-bold text-indigo-600 mb-4">Informations</h2>
                 
-                <div class="space-y-4">
-                    <div>
-                        <p class="text-gray-600">
-                            <span class="font-semibold">Statut:</span> 
-                            <?php if ($game['status'] == 'waiting'): ?>
-                                <span class="text-yellow-500">En attente</span>
-                            <?php elseif ($game['status'] == 'in_progress'): ?>
-                                <span class="text-green-500">En cours</span>
+                <div class="mb-4">
+                    <h3 class="font-semibold text-gray-700">Partie #<?php echo $game_id; ?></h3>
+                    <p class="text-gray-600">
+                        Statut: 
+                        <span class="font-medium <?php 
+                            echo $gameData['game']['status'] === 'in_progress' ? 'text-green-600' : 
+                                 ($gameData['game']['status'] === 'finished' ? 'text-red-600' : 'text-yellow-600'); 
+                        ?>">
+                            <?php 
+                                echo $gameData['game']['status'] === 'in_progress' ? 'En cours' : 
+                                     ($gameData['game']['status'] === 'finished' ? 'Terminée' : 'En attente'); 
+                            ?>
+                        </span>
+                    </p>
+                </div>
+                
+                <div class="mb-4">
+                    <h3 class="font-semibold text-gray-700">Joueurs</h3>
+                    <div class="flex items-center justify-between mt-2 p-2 bg-indigo-50 rounded">
+                        <span class="flex items-center">
+                            <span class="w-4 h-4 bg-black rounded-full mr-2"></span>
+                            <span class="font-medium"><?php echo $isPlayer1 ? 'Vous' : ($opponentIsBot ? 'IA' : 'Adversaire'); ?></span>
+                        </span>
+                        <span class="text-xs bg-indigo-200 px-2 py-1 rounded">Joueur 1</span>
+                    </div>
+                    <div class="flex items-center justify-between mt-2 p-2 bg-indigo-50 rounded">
+                        <span class="flex items-center">
+                            <span class="w-4 h-4 bg-white border border-gray-300 rounded-full mr-2"></span>
+                            <span class="font-medium"><?php echo !$isPlayer1 ? 'Vous' : ($opponentIsBot ? 'IA' : 'Adversaire'); ?></span>
+                        </span>
+                        <span class="text-xs bg-indigo-200 px-2 py-1 rounded">Joueur 2</span>
+                    </div>
+                </div>
+                
+                <div id="game-status" class="mb-4">
+                    <h3 class="font-semibold text-gray-700">Tour actuel</h3>
+                    <p class="mt-2 p-2 bg-indigo-50 rounded text-center font-medium">
+                        <?php if ($gameData['game']['status'] === 'finished'): ?>
+                            Partie terminée
+                        <?php else: ?>
+                            <?php if ($isUserTurn): ?>
+                                <span class="text-green-600">À vous de jouer</span>
                             <?php else: ?>
-                                <span class="text-red-500">Terminée</span>
+                                <span class="text-orange-600">Au tour de l'adversaire</span>
                             <?php endif; ?>
-                        </p>
-                    </div>
-                    
-                    <div>
-                        <p class="text-gray-600">
-                            <span class="font-semibold">Tour actuel:</span> 
-                            <?php if ($isMyTurn): ?>
-                                <span class="text-green-500">C'est votre tour</span>
-                            <?php else: ?>
-                                <span class="text-yellow-500">Tour de l'adversaire</span>
-                            <?php endif; ?>
-                        </p>
-                    </div>
-                    
-                    <div>
-                        <p class="text-gray-600">
-                            <span class="font-semibold">Votre couleur:</span> 
-                            <span class="<?php echo ($myColor == 'black') ? 'text-black' : 'text-gray-500'; ?>"><?php echo ($myColor == 'black') ? 'Noir' : 'Blanc'; ?></span>
-                        </p>
-                    </div>
-                    
-                    <div>
-                        <p class="text-gray-600">
-                            <span class="font-semibold">Adversaire:</span> 
-                            <?php echo $game['player1_id'] == $userId ? $player2_name : $player1_name; ?>
-                        </p>
-                    </div>
-                    
-                    <?php if ($isGameOver): ?>
-                        <div class="mt-4 p-3 rounded-lg <?php echo $isWinner ? 'bg-green-100 text-green-700' : ($isLoser ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'); ?>">
-                            <?php if ($isWinner): ?>
-                                <p class="font-bold">Félicitations ! Vous avez gagné !</p>
-                            <?php elseif ($isLoser): ?>
-                                <p class="font-bold">Vous avez perdu. Meilleure chance la prochaine fois !</p>
-                            <?php else: ?>
-                                <p class="font-bold">Match nul !</p>
-                            <?php endif; ?>
-                        </div>
-                    <?php endif; ?>
+                        <?php endif; ?>
+                    </p>
                 </div>
             </div>
             
-            <?php if (!$isGameOver): ?>
-                <div class="bg-white rounded-lg shadow-md p-4">
-                    <h2 class="text-xl font-semibold text-gray-800 mb-4">Aide</h2>
-                    
-                    <div class="space-y-2 text-gray-600 text-sm">
-                        <p>• Cliquez sur l'une de vos pièces pour la sélectionner.</p>
-                        <p>• Les cases en surbrillance indiquent les déplacements possibles.</p>
-                        <p>• Cliquez sur une case en surbrillance pour y déplacer votre pièce.</p>
-                        <p>• La prise est obligatoire lorsqu'elle est possible.</p>
-                        <p>• Un pion devient une dame en atteignant la dernière rangée.</p>
-                    </div>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-bold text-indigo-600 mb-4">Actions</h2>
+                
+                <div class="space-y-3">
+                    <a href="/game/play.php" class="block w-full py-2 px-4 bg-indigo-100 text-indigo-700 text-center rounded hover:bg-indigo-200 transition">
+                        Retour à mes parties
+                    </a>
+                    <?php if ($gameData['game']['status'] !== 'finished'): ?>
+                        <button id="resign-button" class="block w-full py-2 px-4 bg-red-100 text-red-700 text-center rounded hover:bg-red-200 transition">
+                            Abandonner la partie
+                        </button>
+                    <?php endif; ?>
                 </div>
-            <?php endif; ?>
+            </div>
         </div>
         
-        <!-- Colonne centrale: Plateau de jeu -->
-        <div class="lg:col-span-2" x-data="checkerboard">
-            <?php if ($isGameOver): ?>
-                <div class="bg-white rounded-lg shadow-md p-4 mb-6">
-                    <h2 class="text-xl font-semibold text-gray-800 mb-4">Résultat de la partie</h2>
-                    <p class="text-gray-600 mb-2">
-                        <?php if ($isWinner): ?>
-                            Vous avez remporté la victoire ! Félicitations !
-                        <?php elseif ($isLoser): ?>
-                            Votre adversaire a remporté la partie.
+        <!-- Plateau de jeu -->
+        <div class="w-full md:w-3/4">
+            <div class="bg-white rounded-lg shadow-md p-6" id="game-container">
+                <h2 class="text-xl font-bold text-indigo-600 mb-4">Plateau de jeu</h2>
+                
+                <div class="mb-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-700" id="game-message">
+                    <?php if ($gameData['game']['status'] === 'finished'): ?>
+                        La partie est terminée. 
+                        <?php if ($gameData['game']['winner_id'] == $currentUserId): ?>
+                            Vous avez gagné !
+                        <?php elseif ($gameData['game']['winner_id'] == null): ?>
+                            Match nul !
                         <?php else: ?>
-                            La partie s'est terminée par un match nul.
+                            Vous avez perdu.
                         <?php endif; ?>
-                    </p>
-                    <div class="mt-4">
-                        <a href="/game/play.php" class="bg-indigo-600 text-white py-2 px-4 rounded hover:bg-indigo-700 transition">
-                            Jouer une nouvelle partie
-                        </a>
-                    </div>
+                    <?php else: ?>
+                        <?php if ($isUserTurn): ?>
+                            C'est à votre tour. Sélectionnez une pièce pour la déplacer.
+                        <?php else: ?>
+                            C'est au tour de l'adversaire. Veuillez patienter...
+                        <?php endif; ?>
+                    <?php endif; ?>
                 </div>
-            <?php endif; ?>
-            
-            <div class="bg-white rounded-lg shadow-md p-4 mb-6">
-                <div class="aspect-w-1 aspect-h-1">
-                    <div class="grid grid-cols-8 grid-rows-8 gap-0 border border-gray-400 checkerboard">
-                        <?php for($row = 0; $row < 8; $row++): ?>
-                            <?php for($col = 0; $col < 8; $col++): ?>
-                                <?php 
-                                $isBlackSquare = ($row + $col) % 2 == 1;
-                                $piece = isset($boardState[$row][$col]) ? $boardState[$row][$col] : null;
-                                $pieceColor = null;
-                                $isQueen = false;
-                                
-                                if ($piece) {
-                                    $pieceColor = $piece[0]; // 'b' for black, 'w' for white
-                                    $isQueen = isset($piece[1]) && $piece[1] == 'q';
-                                }
-                                
-                                $isCurrentPlayerPiece = ($pieceColor == 'b' && $myColor == 'black') || ($pieceColor == 'w' && $myColor == 'white');
-                                $isSelectable = $isCurrentPlayerPiece && $isMyTurn && !$isGameOver;
-                                
-                                $squareClasses = $isBlackSquare ? 'bg-gray-700' : 'bg-gray-300';
-                                ?>
-                                
-                                <div 
-                                    class="square aspect-w-1 aspect-h-1 <?php echo $squareClasses; ?>" 
-                                    data-row="<?php echo $row; ?>" 
-                                    data-col="<?php echo $col; ?>"
-                                    @click="selectSquare(<?php echo $row; ?>, <?php echo $col; ?>)"
-                                    :class="{ 'bg-indigo-400': isValidMove(<?php echo $row; ?>, <?php echo $col; ?>) }"
-                                >
-                                    <?php if ($piece): ?>
-                                        <div class="piece flex items-center justify-center w-full h-full">
-                                            <div 
-                                                class="w-4/5 h-4/5 rounded-full flex items-center justify-center <?php echo $pieceColor == 'b' ? 'bg-black' : 'bg-white'; ?> shadow" 
-                                                data-piece="<?php echo $piece; ?>"
-                                                :class="{ 'ring-2 ring-yellow-400': isSelected(<?php echo $row; ?>, <?php echo $col; ?>) }"
-                                            >
-                                                <?php if ($isQueen): ?>
-                                                    <div class="w-1/2 h-1/2 text-center text-xl <?php echo $pieceColor == 'b' ? 'text-white' : 'text-black'; ?>">♕</div>
-                                                <?php else: ?>
-                                                    <div class="w-3/4 h-3/4 rounded-full border-2 <?php echo $pieceColor == 'b' ? 'border-gray-700' : 'border-gray-300'; ?>"></div>
-                                                <?php endif; ?>
-                                            </div>
-                                        </div>
-                                    <?php endif; ?>
-                                </div>
-                            <?php endfor; ?>
-                        <?php endfor; ?>
+                
+                <!-- Plateau de jeu -->
+                <div class="relative mx-auto" style="width: 100%; max-width: 640px;">
+                    <div class="aspect-w-1 aspect-h-1 w-full">
+                        <div id="checkerboard" class="grid grid-cols-8 grid-rows-8 border-2 border-gray-800 select-none">
+                            <!-- Le plateau sera généré par JavaScript -->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -222,245 +171,369 @@ $pageTitle = "Partie #" . $gameId . " - " . APP_NAME;
 </div>
 
 <script>
-document.addEventListener('alpine:init', () => {
-    Alpine.data('checkerboard', () => ({
-        gameId: <?php echo $gameId; ?>,
-        isMyTurn: <?php echo $isMyTurn ? 'true' : 'false'; ?>,
-        myColor: '<?php echo $myColor; ?>',
-        selectedPiece: null,
-        validMoves: [],
-        status: '<?php echo $game['status']; ?>',
-        isGameOver: <?php echo $isGameOver ? 'true' : 'false'; ?>,
-        winnerId: <?php echo $isGameOver && isset($game['winner_id']) ? $game['winner_id'] : 'null'; ?>,
-        myId: <?php echo $myId; ?>,
-        currentPlayer: <?php echo $game['current_player']; ?>,
+document.addEventListener('DOMContentLoaded', function() {
+    // Données du jeu
+    const gameId = <?php echo $game_id; ?>;
+    const isUserTurn = <?php echo $isUserTurn ? 'true' : 'false'; ?>;
+    const isPlayer1 = <?php echo $isPlayer1 ? 'true' : 'false'; ?>;
+    const gameStatus = "<?php echo $gameData['game']['status']; ?>";
+    const opponentIsBot = <?php echo $opponentIsBot ? 'true' : 'false'; ?>;
+    let boardState = <?php echo $gameData['game']['board_state']; ?>;
+    let selectedPiece = null;
+    let possibleMoves = [];
+    
+    // Éléments DOM
+    const checkerboard = document.getElementById('checkerboard');
+    const gameMessage = document.getElementById('game-message');
+    const gameStatus_el = document.getElementById('game-status');
+    const resignButton = document.getElementById('resign-button');
+    
+    // Fonction pour initialiser le plateau
+    function initBoard() {
+        checkerboard.innerHTML = '';
         
-        selectSquare(row, col) {
-            if (!this.isMyTurn || this.isGameOver) return;
-            
-            const square = document.querySelector(`.square[data-row="${row}"][data-col="${col}"]`);
-            const piece = square.querySelector('.piece');
-            
-            // Si on clique sur une case vide qui est un mouvement valide
-            if (!piece && this.isValidMove(row, col)) {
-                this.makeMove(row, col);
-                return;
-            }
-            
-            // Si pas de pièce ou pas notre couleur, on ignore
-            if (!piece) return;
-            
-            const pieceElement = piece.querySelector('[data-piece]');
-            if (!pieceElement) return;
-            
-            const pieceData = pieceElement.getAttribute('data-piece');
-            const pieceColor = pieceData[0];
-            
-            // Vérifier si c'est notre pièce
-            const isOurPiece = (pieceColor === 'b' && this.myColor === 'black') || 
-                              (pieceColor === 'w' && this.myColor === 'white');
-            
-            if (!isOurPiece) return;
-            
-            // Si c'est notre pièce, on la sélectionne et on calcule les mouvements possibles
-            this.selectedPiece = { row, col, pieceData };
-            this.calculateValidMoves();
-        },
-        
-        isSelected(row, col) {
-            return this.selectedPiece && 
-                   this.selectedPiece.row === row && 
-                   this.selectedPiece.col === col;
-        },
-        
-        isValidMove(row, col) {
-            return this.validMoves.some(move => move.row === row && move.col === col);
-        },
-        
-        calculateValidMoves() {
-            // Cette fonction serait normalement plus complexe pour calculer les mouvements valides
-            // Pour simplifier, nous utilisons une liste statique de mouvements valides
-            this.validMoves = [];
-            
-            if (!this.selectedPiece) return;
-            
-            // Exemple simplifié : mouvements diagonaux
-            const { row, col, pieceData } = this.selectedPiece;
-            const isQueen = pieceData.length > 1 && pieceData[1] === 'q';
-            const direction = this.myColor === 'black' ? 1 : -1; // Direction de mouvement
-            
-            // Pour une reine, on peut aller dans toutes les directions
-            if (isQueen) {
-                // Diagonales
-                for (let i = -1; i <= 1; i += 2) {
-                    for (let j = -1; j <= 1; j += 2) {
-                        let r = row + i;
-                        let c = col + j;
-                        while (r >= 0 && r < 8 && c >= 0 && c < 8) {
-                            const targetSquare = document.querySelector(`.square[data-row="${r}"][data-col="${c}"]`);
-                            const hasPiece = targetSquare.querySelector('.piece');
-                            
-                            if (!hasPiece) {
-                                this.validMoves.push({ row: r, col: c });
-                            } else {
-                                // Si c'est une pièce adverse, on peut potentiellement la capturer
-                                const pieceElement = targetSquare.querySelector('[data-piece]');
-                                const pieceData = pieceElement.getAttribute('data-piece');
-                                const pieceColor = pieceData[0];
-                                
-                                const isOpponentPiece = (pieceColor === 'w' && this.myColor === 'black') || 
-                                                       (pieceColor === 'b' && this.myColor === 'white');
-                                
-                                if (isOpponentPiece) {
-                                    const jumpRow = r + i;
-                                    const jumpCol = c + j;
-                                    
-                                    if (jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
-                                        const jumpSquare = document.querySelector(`.square[data-row="${jumpRow}"][data-col="${jumpCol}"]`);
-                                        const hasJumpPiece = jumpSquare.querySelector('.piece');
-                                        
-                                        if (!hasJumpPiece) {
-                                            this.validMoves.push({ row: jumpRow, col: jumpCol, capture: { row: r, col: c } });
-                                        }
-                                    }
-                                }
-                                break;
-                            }
-                            
-                            r += i;
-                            c += j;
-                        }
+        for (let row = 0; row < 8; row++) {
+            for (let col = 0; col < 8; col++) {
+                const isBlackSquare = (row + col) % 2 === 1;
+                const square = document.createElement('div');
+                square.className = `square ${isBlackSquare ? 'bg-gray-800' : 'bg-gray-200'} relative`;
+                square.dataset.row = row;
+                square.dataset.col = col;
+                
+                // Ajouter un événement de clic pour les cases
+                square.addEventListener('click', function() {
+                    handleSquareClick(row, col);
+                });
+                
+                checkerboard.appendChild(square);
+                
+                // Ajouter une pièce si nécessaire
+                if (isBlackSquare && boardState[row] && boardState[row][col]) {
+                    const piece = boardState[row][col];
+                    if (piece) {
+                        addPiece(row, col, piece.player, piece.type === 'king');
                     }
                 }
+            }
+        }
+    }
+    
+    // Fonction pour ajouter une pièce au plateau
+    function addPiece(row, col, player, isKing = false) {
+        const square = getSquare(row, col);
+        if (!square) return;
+        
+        const piece = document.createElement('div');
+        piece.className = `piece absolute inset-0 m-auto rounded-full border-2 ${player === 1 ? 'bg-black border-gray-600' : 'bg-white border-gray-300'} w-4/5 h-4/5 transform transition-transform`;
+        piece.dataset.player = player;
+        
+        // Ajouter une couronne pour les dames
+        if (isKing) {
+            const crown = document.createElement('div');
+            crown.className = `absolute inset-0 flex items-center justify-center text-${player === 1 ? 'white' : 'black'} font-bold text-lg`;
+            crown.textContent = '♔';
+            piece.appendChild(crown);
+        }
+        
+        square.appendChild(piece);
+    }
+    
+    // Fonction pour obtenir une case à partir des coordonnées
+    function getSquare(row, col) {
+        return document.querySelector(`.square[data-row="${row}"][data-col="${col}"]`);
+    }
+    
+    // Fonction pour gérer le clic sur une case
+    function handleSquareClick(row, col) {
+        // Si le jeu est terminé ou ce n'est pas le tour du joueur, ne rien faire
+        if (gameStatus === 'finished' || !isUserTurn) return;
+        
+        const square = getSquare(row, col);
+        const piece = square.querySelector('.piece');
+        
+        // Si aucune pièce n'est sélectionnée et qu'il y a une pièce sur la case
+        if (!selectedPiece && piece) {
+            const piecePlayer = parseInt(piece.dataset.player);
+            const isUserPiece = (isPlayer1 && piecePlayer === 1) || (!isPlayer1 && piecePlayer === 2);
+            
+            // Vérifier si c'est une pièce du joueur
+            if (isUserPiece) {
+                selectPiece(row, col);
+            }
+        } 
+        // Si une pièce est sélectionnée et que la case cliquée est une destination possible
+        else if (selectedPiece) {
+            const fromRow = parseInt(selectedPiece.dataset.row);
+            const fromCol = parseInt(selectedPiece.dataset.col);
+            
+            // Vérifier si c'est un mouvement valide
+            const validMove = possibleMoves.find(move => 
+                move.toRow === row && move.toCol === col
+            );
+            
+            if (validMove) {
+                makeMove(fromRow, fromCol, row, col);
             } else {
-                // Pour un pion normal, on ne peut aller que vers l'avant
-                for (let j = -1; j <= 1; j += 2) {
-                    const r = row + direction;
-                    const c = col + j;
+                // Désélectionner si on clique ailleurs
+                unselectPiece();
+            }
+        }
+    }
+    
+    // Fonction pour sélectionner une pièce
+    function selectPiece(row, col) {
+        // Désélectionner la pièce précédente si elle existe
+        unselectPiece();
+        
+        const square = getSquare(row, col);
+        const piece = square.querySelector('.piece');
+        
+        // Marquer la pièce comme sélectionnée
+        piece.classList.add('ring-4', 'ring-yellow-400', 'scale-110', 'z-10');
+        selectedPiece = { element: piece, dataset: { row, col } };
+        
+        // Calculer et afficher les mouvements possibles
+        calculatePossibleMoves(row, col);
+    }
+    
+    // Fonction pour désélectionner une pièce
+    function unselectPiece() {
+        if (selectedPiece) {
+            selectedPiece.element.classList.remove('ring-4', 'ring-yellow-400', 'scale-110', 'z-10');
+            selectedPiece = null;
+            
+            // Supprimer les indicateurs de mouvement possible
+            document.querySelectorAll('.move-indicator').forEach(indicator => {
+                indicator.remove();
+            });
+            
+            possibleMoves = [];
+        }
+    }
+    
+    // Fonction pour calculer les mouvements possibles
+    function calculatePossibleMoves(row, col) {
+        const piecePlayer = parseInt(selectedPiece.element.dataset.player);
+        const isKing = selectedPiece.element.querySelector('.crown') !== null;
+        
+        // Direction du mouvement selon le joueur
+        const directions = isKing ? [
+            { dr: -1, dc: -1 }, { dr: -1, dc: 1 }, { dr: 1, dc: -1 }, { dr: 1, dc: 1 }
+        ] : (
+            piecePlayer === 1 ? 
+            [{ dr: 1, dc: -1 }, { dr: 1, dc: 1 }] :  // Pion noir (vers le bas)
+            [{ dr: -1, dc: -1 }, { dr: -1, dc: 1 }]  // Pion blanc (vers le haut)
+        );
+        
+        // Récupérer les mouvements possibles via l'API
+        fetch(`/api/game/status.php?game_id=${gameId}&check_moves=1&from_row=${row}&from_col=${col}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.possible_moves) {
+                    possibleMoves = data.possible_moves;
                     
-                    if (r >= 0 && r < 8 && c >= 0 && c < 8) {
-                        const targetSquare = document.querySelector(`.square[data-row="${r}"][data-col="${c}"]`);
-                        const hasPiece = targetSquare.querySelector('.piece');
-                        
-                        if (!hasPiece) {
-                            this.validMoves.push({ row: r, col: c });
-                        }
-                    }
+                    // Afficher les mouvements possibles
+                    possibleMoves.forEach(move => {
+                        const targetSquare = getSquare(move.toRow, move.toCol);
+                        const indicator = document.createElement('div');
+                        indicator.className = 'move-indicator absolute inset-0 m-auto w-1/4 h-1/4 bg-green-500 rounded-full opacity-60 z-5 cursor-pointer';
+                        targetSquare.appendChild(indicator);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Erreur lors de la récupération des mouvements possibles:', error);
+            });
+    }
+    
+    // Fonction pour effectuer un mouvement
+    function makeMove(fromRow, fromCol, toRow, toCol) {
+        // Désactiver les interactions pendant l'envoi
+        document.body.classList.add('cursor-wait');
+        gameMessage.textContent = "Traitement de votre mouvement...";
+        
+        // Envoyer le mouvement au serveur
+        fetch('/api/game/move.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                game_id: gameId,
+                from_row: fromRow,
+                from_col: fromCol,
+                to_row: toRow,
+                to_col: toCol
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Mettre à jour le plateau
+                boardState = data.board_state;
+                updateBoard();
+                
+                // Mettre à jour les messages et statuts
+                gameMessage.textContent = data.message || "Mouvement effectué avec succès.";
+                
+                // Si c'est une partie contre un bot, attendre la réponse du bot
+                if (opponentIsBot && data.game_status === 'in_progress') {
+                    gameMessage.textContent = "L'IA réfléchit à son prochain coup...";
+                    
+                    // Attendre un peu puis récupérer l'état du jeu (mouvement du bot)
+                    setTimeout(() => {
+                        checkGameStatus();
+                    }, 1000);
                 }
                 
-                // Vérifier les captures
-                for (let j = -1; j <= 1; j += 2) {
-                    const r = row + direction * 2;
-                    const c = col + j * 2;
+                // Si le jeu est terminé
+                if (data.game_status === 'finished') {
+                    handleGameOver(data.winner_id);
+                }
+            } else {
+                gameMessage.textContent = data.message || "Erreur lors de l'exécution du mouvement.";
+                unselectPiece();
+            }
+        })
+        .catch(error => {
+            console.error('Erreur lors de l\'envoi du mouvement:', error);
+            gameMessage.textContent = "Erreur de connexion. Veuillez réessayer.";
+            unselectPiece();
+        })
+        .finally(() => {
+            document.body.classList.remove('cursor-wait');
+        });
+    }
+    
+    // Fonction pour vérifier l'état du jeu
+    function checkGameStatus() {
+        fetch(`/api/game/status.php?game_id=${gameId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Mettre à jour le plateau si nécessaire
+                    if (JSON.stringify(boardState) !== JSON.stringify(data.game.board_state)) {
+                        boardState = data.game.board_state;
+                        updateBoard();
+                    }
                     
-                    if (r >= 0 && r < 8 && c >= 0 && c < 8) {
-                        const targetSquare = document.querySelector(`.square[data-row="${r}"][data-col="${c}"]`);
-                        const hasPiece = targetSquare.querySelector('.piece');
-                        
-                        if (!hasPiece) {
-                            const captureRow = row + direction;
-                            const captureCol = col + j;
-                            const captureSquare = document.querySelector(`.square[data-row="${captureRow}"][data-col="${captureCol}"]`);
-                            const capturePiece = captureSquare.querySelector('.piece');
-                            
-                            if (capturePiece) {
-                                const pieceElement = capturePiece.querySelector('[data-piece]');
-                                const pieceData = pieceElement.getAttribute('data-piece');
-                                const pieceColor = pieceData[0];
-                                
-                                const isOpponentPiece = (pieceColor === 'w' && this.myColor === 'black') || 
-                                                       (pieceColor === 'b' && this.myColor === 'white');
-                                
-                                if (isOpponentPiece) {
-                                    this.validMoves.push({ row: r, col: c, capture: { row: captureRow, col: captureCol } });
-                                }
-                            }
-                        }
+                    // Mettre à jour le statut du tour
+                    const newIsUserTurn = (data.game.current_player === (isPlayer1 ? 1 : 2));
+                    if (newIsUserTurn !== isUserTurn) {
+                        gameStatus_el.innerHTML = `
+                            <h3 class="font-semibold text-gray-700">Tour actuel</h3>
+                            <p class="mt-2 p-2 bg-indigo-50 rounded text-center font-medium">
+                                <span class="text-green-600">À vous de jouer</span>
+                            </p>
+                        `;
+                        gameMessage.textContent = "C'est à votre tour. Sélectionnez une pièce pour la déplacer.";
+                        window.location.reload(); // Recharger pour mettre à jour tous les états
+                    }
+                    
+                    // Si le jeu est terminé
+                    if (data.game.status === 'finished') {
+                        handleGameOver(data.game.winner_id);
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Erreur lors de la vérification de l\'état du jeu:', error);
+            });
+    }
+    
+    // Fonction pour mettre à jour le plateau
+    function updateBoard() {
+        // Supprimer toutes les pièces
+        document.querySelectorAll('.piece').forEach(piece => {
+            piece.remove();
+        });
+        
+        // Ajouter les pièces selon l'état actuel
+        for (let row = 0; row < 8; row++) {
+            for (let col = 0; col < 8; col++) {
+                if (boardState[row] && boardState[row][col]) {
+                    const piece = boardState[row][col];
+                    if (piece) {
+                        addPiece(row, col, piece.player, piece.type === 'king');
                     }
                 }
             }
-        },
+        }
         
-        makeMove(toRow, toCol) {
-            if (!this.selectedPiece) return;
-            
-            const { row: fromRow, col: fromCol } = this.selectedPiece;
-            
-            // Envoyer le mouvement au serveur
-            fetch(`/api/game/move.php?id=${this.gameId}`, {
+        // Désélectionner toute pièce
+        unselectPiece();
+    }
+    
+    // Fonction pour gérer la fin de partie
+    function handleGameOver(winnerId) {
+        const currentUserId = <?php echo $currentUserId; ?>;
+        
+        if (winnerId === currentUserId) {
+            gameMessage.textContent = "Félicitations ! Vous avez gagné la partie !";
+            gameMessage.className = "mb-4 p-3 bg-green-50 border-l-4 border-green-400 text-green-700";
+        } else if (winnerId === null) {
+            gameMessage.textContent = "La partie s'est terminée par un match nul.";
+            gameMessage.className = "mb-4 p-3 bg-blue-50 border-l-4 border-blue-400 text-blue-700";
+        } else {
+            gameMessage.textContent = "Vous avez perdu la partie.";
+            gameMessage.className = "mb-4 p-3 bg-red-50 border-l-4 border-red-400 text-red-700";
+        }
+        
+        gameStatus_el.innerHTML = `
+            <h3 class="font-semibold text-gray-700">Statut</h3>
+            <p class="mt-2 p-2 bg-indigo-50 rounded text-center font-medium">
+                <span class="text-red-600">Partie terminée</span>
+            </p>
+        `;
+    }
+    
+    // Fonction pour abandonner la partie
+    function resignGame() {
+        if (confirm("Êtes-vous sûr de vouloir abandonner cette partie ? Cette action est irréversible.")) {
+            fetch('/api/game/move.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    from_row: fromRow,
-                    from_col: fromCol,
-                    to_row: toRow,
-                    to_col: toCol
+                    game_id: gameId,
+                    resign: true
                 })
             })
             .then(response => response.json())
-            .then(result => {
-                if (result.success) {
-                    // Recharger la page pour mettre à jour l'état du jeu
-                    location.reload();
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
                 } else {
-                    alert(result.message);
+                    alert(data.message || "Erreur lors de l'abandon de la partie.");
                 }
             })
             .catch(error => {
-                console.error('Erreur:', error);
-                alert("Une erreur est survenue lors de l'envoi du mouvement.");
+                console.error('Erreur lors de l\'abandon de la partie:', error);
+                alert("Erreur de connexion. Veuillez réessayer.");
             });
-        },
-        
-        checkBoardUpdates() {
-            fetch(`/api/game/status.php?id=${this.gameId}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (result.success) {
-                    // Vérifier si le statut a changé
-                    if (result.status !== this.status) {
-                        this.status = result.status;
-                        this.winnerId = result.winner_id;
-                        
-                        if (this.status === 'finished') {
-                            // Recharger la page pour afficher les résultats finaux
-                            location.reload();
-                            return;
-                        }
-                    }
-                    
-                    // Vérifier si c'est maintenant notre tour
-                    if (result.current_player === this.myId && !this.isMyTurn) {
-                        this.isMyTurn = true;
-                        this.currentPlayer = this.myId;
-                        
-                        // Recharger la page pour obtenir le nouvel état du plateau
-                        location.reload();
-                    } else {
-                        // Continuer à vérifier les mises à jour
-                        setTimeout(() => this.checkBoardUpdates(), 5000);
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Erreur:', error);
-                setTimeout(() => this.checkBoardUpdates(), 10000); // Réessayer après une erreur
-            });
-        },
-        
-        init() {
-            if (!this.isMyTurn && !this.isGameOver) {
-                this.checkBoardUpdates();
-            }
         }
-    }));
+    }
+    
+    // Attacher l'événement au bouton d'abandon
+    if (resignButton) {
+        resignButton.addEventListener('click', resignGame);
+    }
+    
+    // Vérifier périodiquement l'état du jeu si ce n'est pas le tour de l'utilisateur
+    if (!isUserTurn && gameStatus === 'in_progress') {
+        const checkInterval = setInterval(() => {
+            checkGameStatus();
+            
+            // Arrêter la vérification si la page est fermée
+            window.addEventListener('beforeunload', () => {
+                clearInterval(checkInterval);
+            });
+        }, 5000); // Vérifier toutes les 5 secondes
+    }
+    
+    // Initialiser le plateau
+    initBoard();
 });
 </script>
 

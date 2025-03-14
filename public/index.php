@@ -151,6 +151,7 @@ if ($uri == '/game/play.php') {
     require_once __DIR__ . '/game/play.php';
     exit;
 } elseif ($uri == '/game/board.php') {
+    error_log("Requête vers /game/board.php détectée dans index.php");
     require_once __DIR__ . '/game/board.php';
     exit;
 }

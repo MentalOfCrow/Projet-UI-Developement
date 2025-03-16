@@ -3,47 +3,33 @@ require_once __DIR__ . '/../../../backend/includes/config.php';
 require_once __DIR__ . '/../../../backend/controllers/MatchmakingController.php';
 require_once __DIR__ . '/../../../backend/includes/session.php';
 
-// Vérifier si l'utilisateur est connecté
-if (!Session::isLoggedIn()) {
-    header('Content-Type: application/json');
-    echo json_encode([
-        'success' => false,
-        'message' => 'Vous devez être connecté pour accéder à cette fonctionnalité.'
-    ]);
-    exit;
-}
+// Vérifier que l'utilisateur est authentifié
+Session::requireLogin();
 
-// Récupérer l'ID de l'utilisateur
-$user_id = Session::getUserId();
-
-// Récupérer l'action demandée (join, leave, check)
-$action = $_GET['action'] ?? '';
-
-// Instancier le contrôleur de matchmaking
+// Initialiser le contrôleur de matchmaking
 $matchmakingController = new MatchmakingController();
 
-// Traiter l'action demandée
+// Récupérer l'action demandée
+$action = isset($_GET['action']) ? $_GET['action'] : '';
+
+// Traiter l'action
 switch ($action) {
     case 'join':
-        $result = $matchmakingController->joinQueue(['user_id' => $user_id]);
+        $result = $matchmakingController->joinQueue();
         break;
-    
     case 'leave':
-        $result = $matchmakingController->leaveQueue(['user_id' => $user_id]);
+        $result = $matchmakingController->leaveQueue();
         break;
-    
     case 'check':
-        $result = $matchmakingController->checkQueue(['user_id' => $user_id]);
+        $result = $matchmakingController->checkQueue();
         break;
-    
     default:
         $result = [
             'success' => false,
-            'message' => 'Action non valide. Utilisez join, leave ou check.'
+            'message' => 'Action non reconnue'
         ];
 }
 
-// Retourner le résultat en JSON
+// Envoyer la réponse en JSON
 header('Content-Type: application/json');
-echo json_encode($result);
-exit; 
+echo json_encode($result); 

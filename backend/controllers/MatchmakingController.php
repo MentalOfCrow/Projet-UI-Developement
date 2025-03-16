@@ -22,59 +22,67 @@ class MatchmakingController {
      * @return array Résultat de l'opération
      */
     public function joinQueue($data = []) {
-        Session::requireLogin();
-        $user_id = Session::getUserId();
-        
         try {
-            // Vérifier si l'utilisateur est déjà dans la file d'attente
-            $stmt = $this->db->prepare("SELECT * FROM queue WHERE user_id = ?");
-            $stmt->execute([$user_id]);
+            // Récupérer l'identifiant du joueur
+            $user_id = isset($data['user_id']) ? $data['user_id'] : Session::getUserId();
+            
+            // Vérifier si le joueur est déjà dans la file d'attente
+            $query = "SELECT * FROM queue WHERE user_id = :user_id";
+            $stmt = $this->db->prepare($query);
+            $stmt->bindParam(':user_id', $user_id);
+            $stmt->execute();
             
             if ($stmt->rowCount() > 0) {
                 return [
-                    'success' => true,
+                    'success' => false,
                     'message' => 'Vous êtes déjà dans la file d\'attente.'
                 ];
             }
             
-            // Ajouter l'utilisateur à la file d'attente
-            $stmt = $this->db->prepare("INSERT INTO queue (user_id, joined_at) VALUES (?, NOW())");
-            $stmt->execute([$user_id]);
+            // Ajouter le joueur à la file d'attente
+            $query = "INSERT INTO queue (user_id, joined_at) VALUES (:user_id, NOW())";
+            $stmt = $this->db->prepare($query);
+            $stmt->bindParam(':user_id', $user_id);
+            $stmt->execute();
             
-            // Chercher un adversaire
+            // Chercher immédiatement un adversaire
             $opponent = $this->findOpponent($user_id);
             
             if ($opponent) {
-                // Retirer les deux joueurs de la file d'attente
-                $this->removeFromQueue($user_id);
-                $this->removeFromQueue($opponent['user_id']);
-                
-                // Créer une nouvelle partie
-                $gameResult = $this->gameController->createGame([
+                // Créer une nouvelle partie entre les deux joueurs
+                $gameController = new GameController();
+                $gameData = [
                     'player1_id' => $user_id,
-                    'player2_id' => $opponent['user_id']
-                ]);
+                    'player2_id' => $opponent
+                ];
                 
-                if ($gameResult['success']) {
+                $result = $gameController->createGame($gameData);
+                
+                if ($result['success']) {
+                    // Retirer les deux joueurs de la file d'attente
+                    $this->removeFromQueue($user_id);
+                    $this->removeFromQueue($opponent);
+                    
                     return [
                         'success' => true,
-                        'match_found' => true,
-                        'game_id' => $gameResult['game_id'],
-                        'message' => 'Adversaire trouvé ! Redirection vers le plateau de jeu...'
+                        'message' => 'Adversaire trouvé! Partie créée.',
+                        'game_id' => $result['game_id'],
+                        'matched' => true
                     ];
                 }
             }
             
+            // Aucun adversaire trouvé pour l'instant
             return [
                 'success' => true,
-                'match_found' => false,
-                'message' => 'Vous avez rejoint la file d\'attente. En attente d\'un adversaire...'
+                'message' => 'Vous avez rejoint la file d\'attente. En attente d\'un adversaire...',
+                'matched' => false
             ];
-            
-        } catch (PDOException $e) {
+        } catch (Exception $e) {
+            error_log('Erreur dans joinQueue: ' . $e->getMessage());
             return [
                 'success' => false,
-                'message' => 'Erreur lors de l\'ajout à la file d\'attente: ' . $e->getMessage()
+                'message' => 'Une erreur est survenue.'
             ];
         }
     }
@@ -133,7 +141,7 @@ class MatchmakingController {
                     $game = $stmt->fetch(PDO::FETCH_ASSOC);
                     return [
                         'success' => true,
-                        'match_found' => true,
+                        'matched' => true,
                         'game_id' => $game['id'],
                         'message' => 'Adversaire trouvé ! Redirection vers le plateau de jeu...'
                     ];
@@ -151,31 +159,38 @@ class MatchmakingController {
             if ($opponent) {
                 // Retirer les deux joueurs de la file d'attente
                 $this->removeFromQueue($user_id);
-                $this->removeFromQueue($opponent['user_id']);
+                $this->removeFromQueue($opponent);
                 
                 // Créer une nouvelle partie
                 $gameResult = $this->gameController->createGame([
                     'player1_id' => $user_id,
-                    'player2_id' => $opponent['user_id']
+                    'player2_id' => $opponent
                 ]);
                 
                 if ($gameResult['success']) {
                     return [
                         'success' => true,
-                        'match_found' => true,
+                        'matched' => true,
                         'game_id' => $gameResult['game_id'],
                         'message' => 'Adversaire trouvé ! Redirection vers le plateau de jeu...'
                     ];
                 }
             }
             
+            // Ajouter le temps d'attente pour le client
+            $stmt = $this->db->prepare("SELECT TIMESTAMPDIFF(SECOND, joined_at, NOW()) as wait_time FROM queue WHERE user_id = ?");
+            $stmt->execute([$user_id]);
+            $waitInfo = $stmt->fetch(PDO::FETCH_ASSOC);
+            
             return [
                 'success' => true,
-                'match_found' => false,
+                'matched' => false,
+                'wait_time' => $waitInfo['wait_time'] ?? 0,
                 'message' => 'En attente d\'un adversaire...'
             ];
             
-        } catch (PDOException $e) {
+        } catch (Exception $e) {
+            error_log('Erreur dans checkQueue: ' . $e->getMessage());
             return [
                 'success' => false,
                 'message' => 'Erreur lors de la vérification de la file d\'attente: ' . $e->getMessage()
@@ -186,22 +201,26 @@ class MatchmakingController {
     /**
      * Recherche un adversaire dans la file d'attente
      * @param int $user_id ID de l'utilisateur
-     * @return array|false Données de l'adversaire ou false si aucun trouvé
+     * @return int|null ID de l'adversaire ou null si aucun trouvé
      */
     private function findOpponent($user_id) {
-        $stmt = $this->db->prepare("
-            SELECT * FROM queue 
-            WHERE user_id != ? 
-            ORDER BY joined_at ASC 
-            LIMIT 1
-        ");
-        $stmt->execute([$user_id]);
-        
-        if ($stmt->rowCount() > 0) {
-            return $stmt->fetch(PDO::FETCH_ASSOC);
+        try {
+            // Rechercher le joueur en attente depuis le plus longtemps (sauf soi-même)
+            $query = "SELECT user_id FROM queue WHERE user_id != :user_id ORDER BY joined_at ASC LIMIT 1";
+            $stmt = $this->db->prepare($query);
+            $stmt->bindParam(':user_id', $user_id);
+            $stmt->execute();
+            
+            if ($stmt->rowCount() > 0) {
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                return $row['user_id'];
+            }
+            
+            return null;
+        } catch (Exception $e) {
+            error_log('Erreur dans findOpponent: ' . $e->getMessage());
+            return null;
         }
-        
-        return false;
     }
     
     /**

@@ -109,14 +109,17 @@ $pageTitle = "Jouer - " . APP_NAME;
         
         <!-- Section matchmaking -->
         <div class="mb-8">
-            <h2 class="text-xl font-semibold mb-4">Jouer contre un joueur</h2>
             <div class="bg-white rounded-lg shadow-md p-6">
-                <p class="mb-4">Affrontez d'autres joueurs en ligne et mesurez vos compétences!</p>
-                <div class="flex justify-center">
-                    <a href="/game/matchmaking.php" class="bg-indigo-600 text-white py-2 px-4 rounded hover:bg-indigo-700 transition">
-                        Trouver un adversaire
-                    </a>
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="bg-blue-100 p-3 rounded-full">
+                        <i class="fas fa-user text-blue-600"></i>
+                    </div>
+                    <h2 class="text-xl font-semibold">Jouer contre un joueur</h2>
                 </div>
+                
+                <a href="/game/matchmaking.php" class="block bg-indigo-600 text-white py-3 px-6 rounded-lg hover:bg-indigo-700 transition text-center font-medium">
+                    Trouver un adversaire
+                </a>
             </div>
         </div>
         

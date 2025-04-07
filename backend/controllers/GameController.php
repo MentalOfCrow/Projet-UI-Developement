@@ -497,137 +497,64 @@ class GameController {
         $row_distance = $to_row - $from_row;
         $col_distance = abs($to_col - $from_col);
         
-        // Pour un simple déplacement (1 case diagonale)
-        if (abs($row_distance) == 1 && $col_distance == 1) {
-            // Si ce n'est pas une dame, vérifier que le mouvement est dans la bonne direction
-            if (!$isKing && (($player == 1 && $row_distance < 0) || ($player == 2 && $row_distance > 0))) {
-                return [
-                    'valid' => false, 
-                    'message' => 'Les pions ne peuvent se déplacer que vers l\'avant.'
-                ];
-            }
-            
-            // Vérifier s'il y a une capture obligatoire disponible
-            if ($this->hasForcedCapture($board, $player)) {
-                return [
-                    'valid' => false, 
-                    'message' => 'Il y a une capture obligatoire disponible.'
-                ];
-            }
-            
-            // Le mouvement est valide
-            return [
-                'valid' => true,
-                'capture' => false
-            ];
-        }
+        // Vérifier si c'est un mouvement de capture
+        $capture = false;
+        $captured = null;
         
-        // Pour une capture (2 cases diagonales)
+        // Si la distance est de 2 cases en diagonale, c'est potentiellement une capture
         if (abs($row_distance) == 2 && $col_distance == 2) {
-            // Si ce n'est pas une dame, vérifier que le mouvement est dans la bonne direction
-            if (!$isKing && (($player == 1 && $row_distance < 0) || ($player == 2 && $row_distance > 0))) {
-                return [
-                    'valid' => false, 
-                    'message' => 'Les pions ne peuvent capturer que vers l\'avant.'
-                ];
-            }
-            
             // Calculer la position de la pièce capturée
             $capture_row = $from_row + ($row_distance / 2);
             $capture_col = $from_col + (($to_col - $from_col) / 2);
             
-            // Vérifier qu'il y a bien une pièce adverse à capturer
-            if (!isset($board[$capture_row][$capture_col]) || 
-                !is_array($board[$capture_row][$capture_col]) || 
-                !isset($board[$capture_row][$capture_col]['player']) || 
-                $board[$capture_row][$capture_col]['player'] == $player) {
+            // Vérifier si la case contient une pièce adverse
+            if (isset($board[$capture_row][$capture_col]) && 
+                is_array($board[$capture_row][$capture_col]) &&
+                isset($board[$capture_row][$capture_col]['player']) && 
+                $board[$capture_row][$capture_col]['player'] != $player) {
+                
+                $capture = true;
+                $captured = [
+                    'row' => $capture_row,
+                    'col' => $capture_col
+                ];
+            } else {
                 return [
-                    'valid' => false, 
+                    'valid' => false,
                     'message' => 'Aucune pièce adverse à capturer.'
                 ];
             }
+        }
+        // Si ce n'est pas une capture, vérifier les règles de mouvement standard
+        elseif (abs($row_distance) == 1 && $col_distance == 1) {
+            // Vérifier si le joueur est obligé de capturer ailleurs
+            if ($this->hasForcedCapture($board, $player)) {
+                return [
+                    'valid' => false,
+                    'message' => 'Vous avez une capture obligatoire à effectuer.'
+                ];
+            }
             
-            // Le mouvement est valide avec capture
+            // Pour les pions, vérifier qu'ils se déplacent uniquement dans leur direction (sauf pour les captures)
+            if (!$isKing && (($player == 1 && $row_distance < 0) || ($player == 2 && $row_distance > 0))) {
+                return [
+                    'valid' => false,
+                    'message' => 'Les pions ne peuvent se déplacer que vers l\'avant.'
+                ];
+            }
+        } else {
             return [
-                'valid' => true,
-                'capture' => true,
-                'captured' => [
-                    'row' => $capture_row,
-                    'col' => $capture_col
-                ]
+                'valid' => false,
+                'message' => 'Mouvement invalide. Les pièces ne peuvent se déplacer qu\'en diagonale.'
             ];
         }
         
-        // Pour les dames, vérifier les déplacements en diagonale de plusieurs cases
-        if ($isKing && abs($row_distance) == abs($col_distance) && abs($row_distance) > 2) {
-            // Vérifier qu'il n'y a pas de pièces sur le chemin sauf éventuellement une à capturer
-            $row_step = ($row_distance > 0) ? 1 : -1;
-            $col_step = ($to_col > $from_col) ? 1 : -1;
-            
-            $pieces_in_path = 0;
-            $capture_position = null;
-            
-            for ($i = 1; $i < abs($row_distance); $i++) {
-                $check_row = $from_row + ($i * $row_step);
-                $check_col = $from_col + ($i * $col_step);
-                
-                if (isset($board[$check_row][$check_col]) && $board[$check_row][$check_col] !== null) {
-                    $pieces_in_path++;
-                    
-                    // Vérifier si c'est une pièce adverse
-                    if ($board[$check_row][$check_col]['player'] != $player) {
-                        $capture_position = [
-                            'row' => $check_row,
-                            'col' => $check_col
-                        ];
-                    } else {
-                        // Si c'est une pièce du joueur, le mouvement est invalide
-                        return [
-                            'valid' => false, 
-                            'message' => 'Il y a une de vos pièces sur le chemin.'
-                        ];
-                    }
-                }
-            }
-            
-            // S'il y a plus d'une pièce sur le chemin, le mouvement est invalide
-            if ($pieces_in_path > 1) {
-                return [
-                    'valid' => false, 
-                    'message' => 'Il y a plusieurs pièces sur le chemin.'
-                ];
-            }
-            
-            // S'il y a une pièce à capturer, c'est un mouvement de capture valide
-            if ($pieces_in_path == 1 && $capture_position) {
-                return [
-                    'valid' => true,
-                    'capture' => true,
-                    'captured' => $capture_position
-                ];
-            }
-            
-            // S'il n'y a pas de pièce sur le chemin, c'est un mouvement ordinaire valide
-            if ($pieces_in_path == 0) {
-                // Vérifier s'il y a une capture obligatoire disponible
-                if ($this->hasForcedCapture($board, $player)) {
-                    return [
-                        'valid' => false, 
-                        'message' => 'Il y a une capture obligatoire disponible.'
-                    ];
-                }
-                
-                return [
-                    'valid' => true,
-                    'capture' => false
-                ];
-            }
-        }
-        
-        // Si aucune des conditions précédentes n'est remplie, le mouvement est invalide
+        // Si toutes les vérifications sont passées, le mouvement est valide
         return [
-            'valid' => false, 
-            'message' => 'Mouvement invalide.'
+            'valid' => true,
+            'message' => $capture ? 'Capture valide.' : 'Mouvement valide.',
+            'capture' => $capture,
+            'captured' => $captured
         ];
     }
     
@@ -755,6 +682,8 @@ class GameController {
         if (isset($validMove['capture']) && $validMove['capture'] && isset($validMove['captured'])) {
             $capture_row = $validMove['captured']['row'];
             $capture_col = $validMove['captured']['col'];
+            
+            error_log("Capture: Suppression de la pièce à la position [$capture_row,$capture_col]");
             $board[$capture_row][$capture_col] = null;
         }
         
@@ -925,30 +854,8 @@ class GameController {
             
             error_log("Partie créée avec l'ID: " . $game_id);
             
-            // Faire jouer le bot (ajouter un délai artificiel pour simuler la réflexion)
-            $this->makeBotMove($game_id);
-            
             // Valider la transaction
             $conn->commit();
-            
-            // Vérifier à nouveau que la partie existe après le mouvement du bot
-            $gameData = $this->getGame($game_id);
-            
-            if (!$gameData['success']) {
-                error_log("ERREUR CRITIQUE: La partie existe mais getGame ne la trouve pas! ID: " . $game_id);
-                error_log("Résultat de getGame: " . json_encode($gameData));
-                
-                // Essayer une requête directe
-                $directQuery = "SELECT id, player1_id, player2_id, status FROM games WHERE id = :game_id";
-                $directStmt = $conn->prepare($directQuery);
-                $directStmt->bindParam(':game_id', $game_id, PDO::PARAM_INT);
-                $directStmt->execute();
-                $result = $directStmt->fetch(PDO::FETCH_ASSOC);
-                
-                error_log("Vérification directe: " . json_encode($result));
-            } else {
-                error_log("Partie vérifiée avec succès après création: " . json_encode($gameData));
-            }
             
             return [
                 'success' => true,
@@ -1077,8 +984,22 @@ class GameController {
                 return true;
             }
             
-            // Choisir un mouvement aléatoire parmi les mouvements possibles
-            $move = $possibleMoves[array_rand($possibleMoves)];
+            // Vérifier s'il y a des captures obligatoires
+            $capturesMoves = [];
+            foreach ($possibleMoves as $move) {
+                $validMove = $this->isValidMove($board, $move['fromRow'], $move['fromCol'], $move['toRow'], $move['toCol'], 2);
+                if (isset($validMove['capture']) && $validMove['capture']) {
+                    $capturesMoves[] = $move;
+                }
+            }
+            
+            // Prioriser les captures si disponibles
+            if (!empty($capturesMoves)) {
+                $move = $capturesMoves[array_rand($capturesMoves)];
+            } else {
+                // Sinon choisir un mouvement aléatoire parmi les mouvements possibles
+                $move = $possibleMoves[array_rand($possibleMoves)];
+            }
             
             error_log("makeBotMove: Mouvement choisi - De: " . $move['fromRow'] . "," . $move['fromCol'] . " À: " . $move['toRow'] . "," . $move['toCol']);
             
@@ -1087,7 +1008,7 @@ class GameController {
             
             if ($validMove['valid']) {
                 // Préparer la variable pour la capture (si applicable)
-                $captured = isset($validMove['captured']) ? $validMove['captured'] : false;
+                $captured = isset($validMove['capture']) && $validMove['capture'];
                 
                 // Appliquer le mouvement sur le plateau
                 $board = $this->moveChecker($board, $move['fromRow'], $move['fromCol'], $move['toRow'], $move['toCol'], 2, $validMove);
@@ -1095,10 +1016,24 @@ class GameController {
                 // Vérifier si le jeu est terminé après ce mouvement
                 $gameOver = $this->checkGameOver($board, 1); // Vérifier si le joueur 1 peut encore jouer
                 
+                // Déterminer le prochain joueur (si le bot peut encore capturer, c'est encore son tour)
+                $nextPlayer = 1; // Par défaut, passer au joueur humain
+                $canCaptureAgain = false;
+                
+                if ($captured && $this->canCaptureFrom($board, $move['toRow'], $move['toCol'], 2)) {
+                    // Le bot peut encore capturer, donc il continue son tour
+                    error_log("makeBotMove: Le bot peut encore capturer depuis sa nouvelle position");
+                    $nextPlayer = 2;
+                    $canCaptureAgain = true;
+                }
+                
+                // Enregistrer le mouvement dans l'historique
+                $this->recordMove($game_id, 0, $move['fromRow'], $move['fromCol'], $move['toRow'], $move['toCol'], $captured);
+                
                 // Mettre à jour l'état de la partie dans la base de données
                 $query = "UPDATE games SET 
                          board_state = :board_state, 
-                         current_player = 1, 
+                         current_player = :next_player, 
                          status = :status, 
                          winner_id = :winner_id,
                          updated_at = NOW() 
@@ -1109,6 +1044,7 @@ class GameController {
                 // Encoder le plateau en JSON
                 $boardJson = json_encode($board);
                 $stmt->bindParam(':board_state', $boardJson);
+                $stmt->bindParam(':next_player', $nextPlayer);
                 
                 // Si le jeu est terminé, mettre à jour le statut et le gagnant
                 $status = $gameOver ? 'finished' : 'in_progress';
@@ -1121,10 +1057,15 @@ class GameController {
                 
                 $result = $stmt->execute();
                 
-                // Enregistrer le mouvement dans l'historique
                 if ($result) {
-                    $this->recordMove($game_id, 0, $move['fromRow'], $move['fromCol'], $move['toRow'], $move['toCol'], $captured);
                     error_log("makeBotMove: Mouvement du bot réussi - ID: " . $game_id);
+                    
+                    // Si le bot peut encore capturer et que c'est toujours son tour, effectuer un autre mouvement
+                    if ($canCaptureAgain && !$gameOver) {
+                        error_log("makeBotMove: Le bot effectue un mouvement supplémentaire");
+                        return $this->makeBotMove($game_id);
+                    }
+                    
                     return true;
                 }
             }

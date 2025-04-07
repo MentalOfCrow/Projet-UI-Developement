@@ -46,19 +46,19 @@ if ($_SERVER['REQUEST_URI'] == '/' || $_SERVER['REQUEST_URI'] == '/index.php') {
                 Jouez aux dames en ligne contre d'autres joueurs. Rejoignez notre communauté et améliorez vos compétences !
             </p>
             
-            <?php if (!Session::isLoggedIn()): ?>
+            <?php if (Session::isLoggedIn()): ?>
+                <div class="flex justify-center">
+                    <a href="/game/play.php" class="bg-white text-purple-700 px-8 py-4 rounded-lg font-semibold text-xl hover:bg-purple-100 transition">
+                        Jouer maintenant
+                    </a>
+                </div>
+            <?php else: ?>
                 <div class="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
                     <a href="/auth/register.php" class="bg-white text-purple-700 px-6 py-3 rounded-lg font-semibold hover:bg-purple-100 transition">
                         Créer un compte
                     </a>
                     <a href="/auth/login.php" class="bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-purple-500 transition">
                         Se connecter
-                    </a>
-                </div>
-            <?php else: ?>
-                <div class="flex justify-center">
-                    <a href="/game/play.php" class="bg-white text-purple-700 px-8 py-4 rounded-lg font-semibold text-xl hover:bg-purple-100 transition">
-                        Jouer maintenant
                     </a>
                 </div>
             <?php endif; ?>

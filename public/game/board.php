@@ -235,6 +235,53 @@ $pageTitle = "Partie #" . $game_id . " - " . APP_NAME;
     </div>
 </div>
 
+<!-- Modal pour fin de partie -->
+<div id="gameOverModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-lg shadow-lg p-8 max-w-md w-full mx-4 text-center">
+        <!-- Victoire -->
+        <div id="victoryContent" class="hidden">
+            <div id="victoryIcon" class="mx-auto w-24 h-24 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="w-full h-full text-green-500">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-green-600 mb-2">Victoire !</h2>
+            <p class="text-gray-700 mb-6">Félicitations, vous avez gagné la partie.</p>
+        </div>
+        
+        <!-- Défaite -->
+        <div id="defeatContent" class="hidden">
+            <div id="defeatIcon" class="mx-auto w-24 h-24 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="w-full h-full text-red-500">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-red-600 mb-2">Défaite</h2>
+            <p class="text-gray-700 mb-6">Vous avez perdu cette partie. Meilleure chance la prochaine fois !</p>
+        </div>
+        
+        <!-- Match nul -->
+        <div id="drawContent" class="hidden">
+            <div id="drawIcon" class="mx-auto w-24 h-24 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="w-full h-full text-blue-500">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-blue-600 mb-2">Match nul</h2>
+            <p class="text-gray-700 mb-6">La partie s'est terminée par un match nul.</p>
+        </div>
+        
+        <div class="flex justify-center space-x-4">
+            <a href="/game/play.php" class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                Retour
+            </a>
+            <a href="/game/matchmaking.php" class="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors">
+                Nouvelle partie
+            </a>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     console.log("Le DOM est chargé et prêt pour les interactions !");
@@ -248,13 +295,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const gameStatus = "<?php echo $gameData['game']['status']; ?>";
     const currentPlayer = <?php echo $gameData['game']['current_player']; ?>;
     const userPlayer = <?php echo $isPlayer1 ? 1 : 2; ?>;
+    const gameWinner = <?php echo $gameData['game']['winner_id'] ? $gameData['game']['winner_id'] : 'null'; ?>;
+    const currentUserId = <?php echo $currentUserId; ?>;
     
     console.log("État du jeu:", {
         game_id: game_id,
         isUserTurn: isUserTurn,
         gameStatus: gameStatus,
         currentPlayer: currentPlayer,
-        userPlayer: userPlayer
+        userPlayer: userPlayer,
+        gameWinner: gameWinner,
+        currentUserId: currentUserId
     });
     
     // Mettre à jour l'état de la partie toutes les 5 secondes si ce n'est pas le tour du joueur
@@ -359,51 +410,118 @@ document.addEventListener('DOMContentLoaded', function() {
         
         console.log("Directions possibles:", directions);
         
-        // Vérifier chaque direction
-        directions.forEach(dir => {
-            const newRow = row + dir.r;
-            const newCol = col + dir.c;
-            
-            // Vérifier si la nouvelle position est dans les limites du plateau
-            if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
-                // Vérifier si la case est vide
-                const targetCell = document.querySelector(`.piece[data-row="${newRow}"][data-col="${newCol}"]`);
-                if (!targetCell) {
-                    possibleMoves.push({
-                        fromRow: row,
-                        fromCol: col,
-                        toRow: newRow,
-                        toCol: newCol,
-                        isCapture: false
-                    });
-                    console.log(`Mouvement simple possible vers [${newRow},${newCol}]`);
-                } else {
-                    // Vérifier une capture possible
-                    const piecePlayer = parseInt(targetCell.dataset.player);
-                    if (piecePlayer !== userPlayer) {
-                        const jumpRow = newRow + dir.r;
-                        const jumpCol = newCol + dir.c;
-                        
-                        // Vérifier si la case après la capture est dans les limites et vide
-                        if (jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
-                            const jumpCell = document.querySelector(`.piece[data-row="${jumpRow}"][data-col="${jumpCol}"]`);
-                            if (!jumpCell) {
-                                possibleMoves.push({
-                                    fromRow: row,
-                                    fromCol: col,
-                                    toRow: jumpRow,
-                                    toCol: jumpCol,
-                                    isCapture: true,
-                                    captureRow: newRow,
-                                    captureCol: newCol
-                                });
-                                console.log(`Capture possible vers [${jumpRow},${jumpCol}], en capturant [${newRow},${newCol}]`);
+        // Pour les pions normaux, on vérifie seulement les mouvements simples et captures
+        if (!isKing) {
+            // Vérifier chaque direction
+            directions.forEach(dir => {
+                const newRow = row + dir.r;
+                const newCol = col + dir.c;
+                
+                // Vérifier si la nouvelle position est dans les limites du plateau
+                if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                    // Vérifier si la case est vide
+                    const targetCell = document.querySelector(`.piece[data-row="${newRow}"][data-col="${newCol}"]`);
+                    if (!targetCell) {
+                        possibleMoves.push({
+                            fromRow: row,
+                            fromCol: col,
+                            toRow: newRow,
+                            toCol: newCol,
+                            isCapture: false
+                        });
+                        console.log(`Mouvement simple possible vers [${newRow},${newCol}]`);
+                    } else {
+                        // Vérifier une capture possible
+                        const piecePlayer = parseInt(targetCell.dataset.player);
+                        if (piecePlayer !== userPlayer) {
+                            const jumpRow = newRow + dir.r;
+                            const jumpCol = newCol + dir.c;
+                            
+                            // Vérifier si la case après la capture est dans les limites et vide
+                            if (jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
+                                const jumpCell = document.querySelector(`.piece[data-row="${jumpRow}"][data-col="${jumpCol}"]`);
+                                if (!jumpCell) {
+                                    possibleMoves.push({
+                                        fromRow: row,
+                                        fromCol: col,
+                                        toRow: jumpRow,
+                                        toCol: jumpCol,
+                                        isCapture: true,
+                                        captureRow: newRow,
+                                        captureCol: newCol
+                                    });
+                                    console.log(`Capture possible vers [${jumpRow},${jumpCol}], en capturant [${newRow},${newCol}]`);
+                                }
                             }
                         }
                     }
                 }
-            }
-        });
+            });
+        } 
+        // Pour les dames, mouvements à longue distance
+        else {
+            // Pour chaque direction, parcourir toute la diagonale
+            directions.forEach(dir => {
+                let currentRow = row;
+                let currentCol = col;
+                
+                // Déplacements simples (sans capture)
+                for (let i = 1; i <= 7; i++) { // Maximum 7 déplacements possibles sur une diagonale
+                    const newRow = row + (dir.r * i);
+                    const newCol = col + (dir.c * i);
+                    
+                    // Vérifier si la position est dans les limites
+                    if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                        // Vérifier si la case est vide
+                        const targetCell = document.querySelector(`.piece[data-row="${newRow}"][data-col="${newCol}"]`);
+                        if (!targetCell) {
+                            // Case vide, on peut s'y déplacer
+                            possibleMoves.push({
+                                fromRow: row,
+                                fromCol: col,
+                                toRow: newRow,
+                                toCol: newCol,
+                                isCapture: false
+                            });
+                            console.log(`Mouvement dame possible vers [${newRow},${newCol}]`);
+                        } else {
+                            // Case occupée, on arrête dans cette direction
+                            const piecePlayer = parseInt(targetCell.dataset.player);
+                            
+                            // Si c'est une pièce adverse, vérifier la capture
+                            if (piecePlayer !== userPlayer) {
+                                // Regarder si la case suivante est libre pour permettre la capture
+                                const jumpRow = newRow + dir.r;
+                                const jumpCol = newCol + dir.c;
+                                
+                                if (jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
+                                    const jumpCell = document.querySelector(`.piece[data-row="${jumpRow}"][data-col="${jumpCol}"]`);
+                                    if (!jumpCell) {
+                                        // On peut capturer la pièce
+                                        possibleMoves.push({
+                                            fromRow: row,
+                                            fromCol: col,
+                                            toRow: jumpRow,
+                                            toCol: jumpCol,
+                                            isCapture: true,
+                                            captureRow: newRow,
+                                            captureCol: newCol
+                                        });
+                                        console.log(`Capture dame possible vers [${jumpRow},${jumpCol}], en capturant [${newRow},${newCol}]`);
+                                    }
+                                }
+                            }
+                            
+                            // Dans tous les cas, on arrête l'exploration dans cette direction
+                            break;
+                        }
+                    } else {
+                        // Position hors limites, on arrête dans cette direction
+                        break;
+                    }
+                }
+            });
+        }
         
         console.log(`Total des mouvements possibles: ${possibleMoves.length}`);
     }
@@ -478,17 +596,34 @@ document.addEventListener('DOMContentLoaded', function() {
             document.body.removeChild(loadingIndicator);
             
             if (data.success) {
-                // Animation de succès avant l'actualisation
-                const successMessage = document.createElement('div');
-                successMessage.className = 'fixed inset-0 bg-green-500 bg-opacity-30 flex items-center justify-center z-50';
-                successMessage.innerHTML = '<div class="bg-white p-4 rounded-lg shadow-lg"><p class="text-lg font-bold text-green-600">Mouvement réussi!</p></div>';
-                document.body.appendChild(successMessage);
-                
-                // Attendre un peu avant d'actualiser la page
-                setTimeout(() => {
-                    // Actualiser la page pour afficher le nouvel état du plateau
-                    window.location.reload();
-                }, 500);
+                // Si la partie est terminée, afficher la modal de fin de partie
+                if (data.game_over) {
+                    const gameOverModal = document.getElementById('gameOverModal');
+                    const victoryContent = document.getElementById('victoryContent');
+                    const defeatContent = document.getElementById('defeatContent');
+                    const drawContent = document.getElementById('drawContent');
+                    
+                    // Afficher la modal correspondante (victoire par défaut car c'est le joueur qui vient de faire le mouvement gagnant)
+                    victoryContent.classList.remove('hidden');
+                    gameOverModal.classList.remove('hidden');
+                    
+                    // Ajouter un délai avant redirection pour permettre à l'utilisateur de voir le résultat
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 3000);
+                } else {
+                    // Animation de succès avant l'actualisation pour un mouvement normal
+                    const successMessage = document.createElement('div');
+                    successMessage.className = 'fixed inset-0 bg-green-500 bg-opacity-30 flex items-center justify-center z-50';
+                    successMessage.innerHTML = '<div class="bg-white p-4 rounded-lg shadow-lg"><p class="text-lg font-bold text-green-600">Mouvement réussi!</p></div>';
+                    document.body.appendChild(successMessage);
+                    
+                    // Attendre un peu avant d'actualiser la page
+                    setTimeout(() => {
+                        // Actualiser la page pour afficher le nouvel état du plateau
+                        window.location.reload();
+                    }, 500);
+                }
             } else {
                 alert('Erreur lors du mouvement: ' + data.message);
             }
@@ -565,8 +700,34 @@ document.addEventListener('DOMContentLoaded', function() {
             document.body.removeChild(loadingIndicator);
             
             if (data.success) {
-                // Rediriger vers la page des parties
-                window.location.href = '/game/play.php?message=' + encodeURIComponent('Vous avez abandonné la partie.');
+                // Afficher un message d'abandon
+                const resignMessage = document.createElement('div');
+                resignMessage.className = 'fixed inset-0 bg-red-500 bg-opacity-20 flex items-center justify-center z-50';
+                resignMessage.innerHTML = `
+                    <div class="bg-white p-6 rounded-lg shadow-lg max-w-md text-center">
+                        <div class="w-16 h-16 bg-red-100 rounded-full mx-auto flex items-center justify-center mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-900 mb-2">Partie abandonnée</h3>
+                        <p class="text-gray-600 mb-4">Vous avez déclaré forfait. Cette partie sera enregistrée comme une défaite dans votre historique.</p>
+                        <button id="goToHistory" class="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition">
+                            Retourner à mes parties
+                        </button>
+                    </div>
+                `;
+                document.body.appendChild(resignMessage);
+                
+                // Ajouter un écouteur pour le bouton
+                document.getElementById('goToHistory').addEventListener('click', () => {
+                    window.location.href = '/game/play.php?message=' + encodeURIComponent('Vous avez abandonné la partie.');
+                });
+                
+                // Rediriger automatiquement après 3 secondes
+                setTimeout(() => {
+                    window.location.href = '/game/play.php?message=' + encodeURIComponent('Vous avez abandonné la partie.');
+                }, 3000);
             } else {
                 alert('Erreur lors de l\'abandon: ' + data.message);
                 abandonModal.classList.add('hidden');
@@ -594,6 +755,24 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('error', function(e) {
         console.error('Erreur JavaScript:', e.message, 'à', e.filename, ':', e.lineno);
     });
+
+    // Vérifier si la partie est terminée et afficher le résultat
+    if (gameStatus === 'finished') {
+        const gameOverModal = document.getElementById('gameOverModal');
+        const victoryContent = document.getElementById('victoryContent');
+        const defeatContent = document.getElementById('defeatContent');
+        const drawContent = document.getElementById('drawContent');
+        
+        if (gameWinner === currentUserId) {
+            victoryContent.classList.remove('hidden');
+        } else if (gameWinner === null) {
+            drawContent.classList.remove('hidden');
+        } else {
+            defeatContent.classList.remove('hidden');
+        }
+        
+        gameOverModal.classList.remove('hidden');
+    }
 });
 </script>
 

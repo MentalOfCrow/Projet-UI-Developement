@@ -1,9 +1,9 @@
     </main>
     
     <!-- Pied de page -->
-    <footer class="bg-purple-900 text-white py-8 mt-auto w-full nav-full-width">
-        <div class="container mx-auto px-4">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+    <footer class="bg-purple-900 text-white py-8 mt-8 w-screen max-w-full left-0 right-0" style="width: 100vw; margin-left: calc(-50vw + 50%); margin-right: calc(-50vw + 50%);">
+        <div class="px-4 w-full max-w-full">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-7xl mx-auto">
                 <div>
                     <h3 class="text-lg font-semibold mb-4"><?php echo APP_NAME; ?></h3>
                     <p class="text-purple-200">
@@ -41,7 +41,7 @@
                 </div>
             </div>
             
-            <div class="mt-8 pt-6 border-t border-purple-800 text-center text-purple-300 text-sm">
+            <div class="mt-8 pt-6 border-t border-purple-800 text-center text-purple-300 text-sm max-w-7xl mx-auto">
                 <p>&copy; <?php echo date('Y'); ?> - <?php echo APP_NAME; ?> | Tous droits réservés</p>
                 <p class="mt-2">Version <?php echo APP_VERSION; ?></p>
             </div>

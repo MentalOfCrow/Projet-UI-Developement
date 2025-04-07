@@ -161,7 +161,7 @@ $pageTitle = "Jouer - " . APP_NAME;
     </div>
     
     <!-- Vos parties en cours -->
-    <div class="bg-white shadow-md rounded-lg overflow-hidden">
+    <div class="bg-white shadow-md rounded-lg overflow-hidden mb-8">
         <div class="p-6">
             <div class="flex items-center mb-4">
                 <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mr-4">
@@ -223,128 +223,203 @@ $pageTitle = "Jouer - " . APP_NAME;
                     </div>
                 <?php endif; ?>
             </div>
+        </div>
+    </div>
+    
+    <!-- Statistiques et historique des parties -->
+    <div class="bg-white shadow-md rounded-lg overflow-hidden mb-8">
+        <div class="p-6">
+            <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mr-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                </div>
+                <h2 class="text-xl font-bold text-gray-800">Vos statistiques</h2>
+            </div>
+            
+            <?php
+            // Calculer les statistiques à partir de l'historique des parties
+            $total_games = 0;
+            $victories = 0;
+            $defeats = 0;
+            $draws = 0;
+            
+            // Récupérer les parties terminées pour l'affichage des statistiques
+            $historyForStats = $gameController->readGameHistory($user_id);
+            
+            // Ajout d'un log de débogage
+            error_log("play.php: Récupération de l'historique pour l'utilisateur {$user_id}, nombre de parties: " . ($historyForStats ? $historyForStats->rowCount() : 'null'));
+            
+            if ($historyForStats && $historyForStats->rowCount() > 0) {
+                // Compter les parties
+                $total_games = $historyForStats->rowCount();
+                
+                // Calculer les statistiques
+                while ($game = $historyForStats->fetch(PDO::FETCH_ASSOC)) {
+                    error_log("play.php: Examen de la partie ID: " . $game['id'] . ", winner_id: " . $game['winner_id'] . ", user_id: {$user_id}");
+                    
+                    if ($game['winner_id'] == $user_id) {
+                        $victories++;
+                        error_log("play.php: Comptabilisé comme victoire");
+                    } elseif ($game['winner_id'] == null) {
+                        $draws++;
+                        error_log("play.php: Comptabilisé comme match nul");
+                    } else {
+                        $defeats++;
+                        error_log("play.php: Comptabilisé comme défaite");
+                    }
+                }
+                
+                error_log("play.php: Totaux - parties: {$total_games}, victoires: {$victories}, défaites: {$defeats}, nuls: {$draws}");
+            }
+            
+            // Récupérer à nouveau l'historique pour l'affichage du tableau
+            $gameHistory = $gameController->readGameHistory($user_id);
+            
+            // Calculer les pourcentages
+            $win_rate = $total_games > 0 ? round(($victories / $total_games) * 100) : 0;
+            $loss_rate = $total_games > 0 ? round(($defeats / $total_games) * 100) : 0;
+            $draw_rate = $total_games > 0 ? round(($draws / $total_games) * 100) : 0;
+            ?>
+            
+            <!-- Affichage des statistiques -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-gray-50 p-4 rounded-lg text-center">
+                    <h3 class="text-lg font-semibold text-gray-800"><?php echo $total_games; ?></h3>
+                    <p class="text-sm text-gray-600">Parties jouées</p>
+                </div>
+                
+                <div class="bg-green-50 p-4 rounded-lg text-center">
+                    <h3 class="text-lg font-semibold text-green-600"><?php echo $victories; ?> (<?php echo $win_rate; ?>%)</h3>
+                    <p class="text-sm text-gray-600">Victoires</p>
+                </div>
+                
+                <div class="bg-red-50 p-4 rounded-lg text-center">
+                    <h3 class="text-lg font-semibold text-red-600"><?php echo $defeats; ?> (<?php echo $loss_rate; ?>%)</h3>
+                    <p class="text-sm text-gray-600">Défaites</p>
+                </div>
+                
+                <div class="bg-blue-50 p-4 rounded-lg text-center">
+                    <h3 class="text-lg font-semibold text-blue-600"><?php echo $draws; ?> (<?php echo $draw_rate; ?>%)</h3>
+                    <p class="text-sm text-gray-600">Matchs nuls</p>
+                </div>
+            </div>
+            
+            <h3 class="text-lg font-semibold text-purple-600 mb-4">Historique des parties</h3>
             
             <?php if ($gameHistory && $gameHistory->rowCount() > 0): ?>
-                <div class="border-t pt-4">
-                    <h3 class="text-md font-semibold text-purple-600 mb-2">Historique des parties</h3>
-                    <button id="show-history" class="w-full py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 font-medium rounded-lg transition duration-200 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                        </svg>
-                        Voir l'historique (<?php echo $gameHistory->rowCount(); ?> parties)
-                    </button>
+                <div class="overflow-x-auto rounded-lg border border-gray-200">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Partie</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adversaire</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Résultat</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <?php while ($game = $gameHistory->fetch(PDO::FETCH_ASSOC)): ?>
+                                <?php
+                                // Déterminer si l'utilisateur est le joueur 1 ou 2
+                                $isPlayer1 = $game['player1_id'] == $user_id;
+                                
+                                // Déterminer l'adversaire
+                                if ($game['player2_id'] === '0' || $game['player2_id'] === 0) {
+                                    $opponentName = 'Intelligence Artificielle';
+                                } else {
+                                    $opponentName = $isPlayer1 ? $game['player2_name'] : $game['player1_name'];
+                                }
+                                
+                                // Déterminer le résultat
+                                $result = '';
+                                $resultClass = '';
+                                $resultBadgeClass = '';
+                                $resultIcon = '';
+                                
+                                if ($game['winner_id'] == $user_id) {
+                                    $result = 'Victoire';
+                                    $resultClass = 'text-green-600';
+                                    $resultBadgeClass = 'bg-green-100 border-green-500';
+                                    $resultIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                    </svg>';
+                                } elseif ($game['winner_id'] == null) {
+                                    $result = 'Match nul';
+                                    $resultClass = 'text-yellow-600';
+                                    $resultBadgeClass = 'bg-yellow-100 border-yellow-500';
+                                    $resultIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
+                                    </svg>';
+                                } else {
+                                    // Défaite si quelqu'un d'autre a gagné, ou si on a joué contre l'IA et qu'on n'est pas le vainqueur
+                                    $result = 'Défaite';
+                                    $resultClass = 'text-red-600';
+                                    $resultBadgeClass = 'bg-red-100 border-red-500';
+                                    $resultIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                    </svg>';
+                                }
+                                
+                                // Formater la date
+                                $date = new DateTime($game['created_at']);
+                                $formattedDate = $date->format('d/m/Y H:i');
+                                ?>
+                                <tr class="hover:bg-gray-50 transition-colors">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-medium text-gray-900">
+                                            #<?php echo $game['id']; ?>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm text-gray-900 font-medium">
+                                            <?php echo htmlspecialchars($opponentName); ?>
+                                        </div>
+                                        <div class="text-xs text-gray-500">
+                                            <?php echo $game['player2_id'] === '0' || $game['player2_id'] === 0 ? 'Intelligence Artificielle' : 'Joueur humain'; ?>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm text-gray-900">
+                                            <?php echo $formattedDate; ?>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <span class="px-3 py-2 inline-flex items-center text-sm leading-5 font-semibold rounded-lg border <?php echo $resultBadgeClass; ?> <?php echo $resultClass; ?>">
+                                                <?php echo $resultIcon; ?>
+                                                <?php echo $result; ?>
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <a href="/game/board.php?id=<?php echo $game['id']; ?>&view=true" class="text-purple-600 hover:text-purple-900 flex items-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                                <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                                            </svg>
+                                            Voir le replay
+                                        </a>
+                                    </td>
+                                </tr>
+                            <?php endwhile; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php else: ?>
+                <div class="flex flex-col items-center justify-center py-8 bg-gray-50 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    <p class="text-gray-500 text-center">Aucune partie terminée pour le moment.</p>
+                    <p class="text-gray-500 text-center text-sm mt-1">Votre historique de jeu apparaîtra ici après avoir terminé des parties.</p>
                 </div>
             <?php endif; ?>
         </div>
     </div>
 </div>
-
-<!-- Historique des parties (caché par défaut) -->
-<?php if ($gameHistory && $gameHistory->rowCount() > 0): ?>
-    <div id="history-section" class="mt-8 bg-white shadow-md rounded-lg overflow-hidden hidden">
-        <div class="p-6">
-            <h2 class="text-xl font-bold text-gray-800 mb-4">Historique de vos parties</h2>
-            
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Partie</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adversaire</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Résultat</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        <?php while ($game = $gameHistory->fetch(PDO::FETCH_ASSOC)): ?>
-                            <?php
-                            // Déterminer si l'utilisateur est le joueur 1 ou 2
-                            $isPlayer1 = $game['player1_id'] == $user_id;
-                            
-                            // Déterminer l'adversaire
-                            $opponentName = $isPlayer1 ? $game['player2_name'] : $game['player1_name'];
-                            if ($game['player2_id'] === '0' || $game['player2_id'] === 0) {
-                                $opponentName = 'IA';
-                            }
-                            
-                            // Déterminer le résultat
-                            $result = '';
-                            $resultClass = '';
-                            $resultBadgeClass = '';
-                            $resultIcon = '';
-                            
-                            if ($game['winner_id'] == $user_id) {
-                                $result = 'Victoire';
-                                $resultClass = 'text-green-600';
-                                $resultBadgeClass = 'bg-green-100 border-green-500';
-                                $resultIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                                </svg>';
-                            } elseif ($game['winner_id'] == null) {
-                                $result = 'Match nul';
-                                $resultClass = 'text-yellow-600';
-                                $resultBadgeClass = 'bg-yellow-100 border-yellow-500';
-                                $resultIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
-                                </svg>';
-                            } else {
-                                $result = 'Défaite';
-                                $resultClass = 'text-red-600';
-                                $resultBadgeClass = 'bg-red-100 border-red-500';
-                                $resultIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                                </svg>';
-                            }
-                            
-                            // Formater la date
-                            $date = new DateTime($game['created_at']);
-                            $formattedDate = $date->format('d/m/Y H:i');
-                            ?>
-                            <tr class="hover:bg-gray-50 transition-colors">
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="text-sm font-medium text-gray-900">
-                                        #<?php echo $game['id']; ?>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="text-sm text-gray-900 font-medium">
-                                        <?php echo htmlspecialchars($opponentName); ?>
-                                    </div>
-                                    <div class="text-xs text-gray-500">
-                                        <?php echo $game['player2_id'] === '0' || $game['player2_id'] === 0 ? 'Intelligence Artificielle' : 'Joueur humain'; ?>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="text-sm text-gray-900">
-                                        <?php echo $formattedDate; ?>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="flex items-center">
-                                        <span class="px-3 py-2 inline-flex items-center text-sm leading-5 font-semibold rounded-lg border <?php echo $resultBadgeClass; ?> <?php echo $resultClass; ?>">
-                                            <?php echo $resultIcon; ?>
-                                            <?php echo $result; ?>
-                                        </span>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                    <a href="/game/board.php?id=<?php echo $game['id']; ?>&view=true" class="text-purple-600 hover:text-purple-900 flex items-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                                            <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
-                                        </svg>
-                                        Voir le replay
-                                    </a>
-                                </td>
-                            </tr>
-                        <?php endwhile; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-<?php endif; ?>
 
 <!-- Modal de chargement pour IA -->
 <div id="loading-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">

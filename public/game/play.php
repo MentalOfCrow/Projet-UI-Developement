@@ -45,7 +45,7 @@ $pageTitle = "Jouer - " . APP_NAME;
 
 <link rel="stylesheet" href="/assets/css/style.css">
 
-<div class="container mx-auto px-4 py-8">
+<div class="container mx-auto px-4 py-8 mt-2 pt-4">
     <h1 class="text-3xl font-bold text-center text-purple-600 mb-8">Choisissez votre mode de jeu</h1>
     
     <?php if ($message): ?>
@@ -54,7 +54,7 @@ $pageTitle = "Jouer - " . APP_NAME;
         </div>
     <?php endif; ?>
     
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
         <!-- Option Jouer contre l'IA -->
         <div class="bg-white shadow-md rounded-lg overflow-hidden">
             <div class="p-6">

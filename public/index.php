@@ -65,7 +65,10 @@ if ($_SERVER['REQUEST_URI'] == '/' || $_SERVER['REQUEST_URI'] == '/index.php') {
         </div>
     </div>
 
-    <div class="container mx-auto px-4 py-16">
+    <!-- Espace blanc explicite -->
+    <div class="h-16 bg-gray-50"></div>
+
+    <div class="container mx-auto px-4 py-16 bg-gray-50">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div class="bg-white p-6 rounded-lg shadow-md text-center">
                 <div class="bg-purple-100 text-purple-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">

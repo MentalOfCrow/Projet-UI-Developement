@@ -158,21 +158,24 @@ class Game {
      * @param int $playerId ID du joueur
      * @return PDOStatement|array Liste des parties terminées
      */
-    public function getGameHistory($playerId) {
+    public function readGameHistory($playerId) {
         try {
             $query = "SELECT g.*, 
                       u1.username as player1_name, 
                       u2.username as player2_name 
                       FROM " . $this->table . " g
                       JOIN users u1 ON g.player1_id = u1.id
-                      JOIN users u2 ON g.player2_id = u2.id
+                      LEFT JOIN users u2 ON g.player2_id = u2.id
                       WHERE (g.player1_id = :player_id OR g.player2_id = :player_id) 
                       AND g.status = 'finished'
-                      ORDER BY g.created_at DESC";
+                      ORDER BY g.updated_at DESC";
             
             $stmt = $this->db->prepare($query);
             $stmt->bindParam(':player_id', $playerId, PDO::PARAM_INT);
             $stmt->execute();
+            
+            // Journaliser le nombre de parties trouvées
+            error_log("Game model: historique de parties pour joueur {$playerId}, nombre trouvé: " . $stmt->rowCount());
             
             return $stmt;
         } catch (PDOException $e) {

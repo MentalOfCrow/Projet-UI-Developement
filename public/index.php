@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_URI'] == '/' || $_SERVER['REQUEST_URI'] == '/index.php') {
     
     // Contenu de la page d'accueil
     ?>
-    <div class="bg-indigo-700 text-white py-16">
+    <div class="bg-purple-700 text-white py-16">
         <div class="container mx-auto px-4 text-center">
             <h1 class="text-4xl md:text-5xl font-bold mb-6">Bienvenue sur <?php echo APP_NAME; ?></h1>
             <p class="text-xl mb-8 max-w-3xl mx-auto">
@@ -48,16 +48,16 @@ if ($_SERVER['REQUEST_URI'] == '/' || $_SERVER['REQUEST_URI'] == '/index.php') {
             
             <?php if (!Session::isLoggedIn()): ?>
                 <div class="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
-                    <a href="/auth/register.php" class="bg-white text-indigo-700 px-6 py-3 rounded-lg font-semibold hover:bg-indigo-100 transition">
+                    <a href="/auth/register.php" class="bg-white text-purple-700 px-6 py-3 rounded-lg font-semibold hover:bg-purple-100 transition">
                         Créer un compte
                     </a>
-                    <a href="/auth/login.php" class="bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-500 transition">
+                    <a href="/auth/login.php" class="bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-purple-500 transition">
                         Se connecter
                     </a>
                 </div>
             <?php else: ?>
                 <div class="flex justify-center">
-                    <a href="/game/play.php" class="bg-white text-indigo-700 px-8 py-4 rounded-lg font-semibold text-xl hover:bg-indigo-100 transition">
+                    <a href="/game/play.php" class="bg-white text-purple-700 px-8 py-4 rounded-lg font-semibold text-xl hover:bg-purple-100 transition">
                         Jouer maintenant
                     </a>
                 </div>
@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_URI'] == '/' || $_SERVER['REQUEST_URI'] == '/index.php') {
     <div class="container mx-auto px-4 py-16">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div class="bg-white p-6 rounded-lg shadow-md text-center">
-                <div class="bg-indigo-100 text-indigo-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div class="bg-purple-100 text-purple-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_URI'] == '/' || $_SERVER['REQUEST_URI'] == '/index.php') {
             </div>
             
             <div class="bg-white p-6 rounded-lg shadow-md text-center">
-                <div class="bg-indigo-100 text-indigo-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div class="bg-purple-100 text-purple-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
@@ -92,7 +92,7 @@ if ($_SERVER['REQUEST_URI'] == '/' || $_SERVER['REQUEST_URI'] == '/index.php') {
             </div>
             
             <div class="bg-white p-6 rounded-lg shadow-md text-center">
-                <div class="bg-indigo-100 text-indigo-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div class="bg-purple-100 text-purple-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
@@ -132,6 +132,12 @@ if (strpos($uri, '/api/') === 0) {
         echo json_encode(['success' => false, 'message' => 'API endpoint not found']);
         exit;
     }
+}
+
+// Page de profil
+if ($uri == '/profile.php') {
+    require_once __DIR__ . '/profile.php';
+    exit;
 }
 
 // Pages d'authentification

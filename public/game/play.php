@@ -54,7 +54,7 @@ $pageTitle = "Jouer - " . APP_NAME;
         </div>
     <?php endif; ?>
     
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
         <!-- Option Jouer contre l'IA -->
         <div class="bg-white shadow-md rounded-lg overflow-hidden">
             <div class="p-6">
@@ -158,185 +158,168 @@ $pageTitle = "Jouer - " . APP_NAME;
                 </a>
             </div>
         </div>
-        
-        <!-- Vos parties en cours -->
-        <div class="bg-white shadow-md rounded-lg overflow-hidden">
-            <div class="p-6">
-                <div class="flex items-center mb-4">
-                    <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mr-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                        </svg>
-                    </div>
-                    <h2 class="text-xl font-bold text-gray-800">Vos parties en cours</h2>
+    </div>
+    
+    <!-- Vos parties en cours -->
+    <div class="bg-white shadow-md rounded-lg overflow-hidden">
+        <div class="p-6">
+            <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mr-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                    </svg>
                 </div>
-                
-                <div class="mb-4 overflow-auto max-h-80">
-                    <?php if ($activeGames && $activeGames->rowCount() > 0): ?>
-                        <ul class="divide-y divide-gray-200">
-                            <?php while ($game = $activeGames->fetch(PDO::FETCH_ASSOC)): ?>
-                                <?php
-                                // Déterminer si l'utilisateur est le joueur 1 ou 2
-                                $isPlayer1 = $game['player1_id'] == $user_id;
-                                
-                                // Déterminer l'adversaire
-                                $opponentName = $isPlayer1 ? $game['player2_name'] : $game['player1_name'];
-                                if ($game['player2_id'] === '0' || $game['player2_id'] === 0) {
-                                    $opponentName = 'IA';
-                                }
-                                
-                                // Déterminer si c'est au tour de l'utilisateur
-                                $isUserTurn = ($isPlayer1 && $game['current_player'] == 1) || (!$isPlayer1 && $game['current_player'] == 2);
-                                ?>
-                                <li class="py-3">
-                                    <div class="flex justify-between items-center">
-                                        <div>
-                                            <span class="font-medium">Partie #<?php echo $game['id']; ?></span>
-                                            <p class="text-sm text-gray-600">
-                                                Contre <?php echo htmlspecialchars($opponentName); ?>
-                                            </p>
-                                        </div>
-                                        <div class="flex items-center space-x-2">
-                                            <?php if ($isUserTurn): ?>
-                                                <span class="px-2 py-1 text-xs font-semibold bg-green-100 text-green-700 rounded-full">Votre tour</span>
-                                            <?php else: ?>
-                                                <span class="px-2 py-1 text-xs font-semibold bg-gray-100 text-gray-700 rounded-full">Tour de l'adversaire</span>
-                                            <?php endif; ?>
-                                            <a href="/game/board.php?id=<?php echo $game['id']; ?>" class="text-purple-600 hover:text-purple-900">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                                </svg>
-                                            </a>
-                                        </div>
+                <h2 class="text-xl font-bold text-gray-800">Vos parties en cours</h2>
+            </div>
+            
+            <div class="mb-4 overflow-auto max-h-80">
+                <?php if ($activeGames && $activeGames->rowCount() > 0): ?>
+                    <ul class="divide-y divide-gray-200">
+                        <?php while ($game = $activeGames->fetch(PDO::FETCH_ASSOC)): ?>
+                            <?php
+                            // Déterminer si l'utilisateur est le joueur 1 ou 2
+                            $isPlayer1 = $game['player1_id'] == $user_id;
+                            
+                            // Déterminer l'adversaire
+                            $opponentName = $isPlayer1 ? $game['player2_name'] : $game['player1_name'];
+                            if ($game['player2_id'] === '0' || $game['player2_id'] === 0) {
+                                $opponentName = 'IA';
+                            }
+                            
+                            // Déterminer si c'est au tour de l'utilisateur
+                            $isUserTurn = ($isPlayer1 && $game['current_player'] == 1) || (!$isPlayer1 && $game['current_player'] == 2);
+                            ?>
+                            <li class="py-3">
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <span class="font-medium">Partie #<?php echo $game['id']; ?></span>
+                                        <p class="text-sm text-gray-600">
+                                            Contre <?php echo htmlspecialchars($opponentName); ?>
+                                        </p>
                                     </div>
-                                </li>
-                            <?php endwhile; ?>
-                        </ul>
-                    <?php else: ?>
-                        <div class="flex flex-col items-center justify-center py-8">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                            </svg>
-                            <p class="text-gray-500 text-center">Vous n'avez aucune partie en cours.</p>
-                            <p class="text-gray-500 text-center text-sm mt-1">Commencez une nouvelle partie en choisissant un mode de jeu.</p>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                
-                <?php if ($gameHistory && $gameHistory->rowCount() > 0): ?>
-                    <div class="border-t pt-4">
-                        <h3 class="text-md font-semibold text-purple-600 mb-2">Historique des parties</h3>
-                        <button id="show-history" class="w-full py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 font-medium rounded-lg transition duration-200 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                            </svg>
-                            Voir l'historique (<?php echo $gameHistory->rowCount(); ?> parties)
-                        </button>
+                                    <div class="flex items-center space-x-2">
+                                        <?php if ($isUserTurn): ?>
+                                            <span class="px-2 py-1 text-xs font-semibold bg-green-100 text-green-700 rounded-full">Votre tour</span>
+                                        <?php else: ?>
+                                            <span class="px-2 py-1 text-xs font-semibold bg-gray-100 text-gray-700 rounded-full">Tour de l'adversaire</span>
+                                        <?php endif; ?>
+                                        <a href="/game/board.php?id=<?php echo $game['id']; ?>" class="text-purple-600 hover:text-purple-900">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                            </svg>
+                                        </a>
+                                    </div>
+                                </div>
+                            </li>
+                        <?php endwhile; ?>
+                    </ul>
+                <?php else: ?>
+                    <div class="flex flex-col items-center justify-center py-8">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                        </svg>
+                        <p class="text-gray-500 text-center">Vous n'avez aucune partie en cours.</p>
+                        <p class="text-gray-500 text-center text-sm mt-1">Commencez une nouvelle partie en choisissant un mode de jeu.</p>
                     </div>
                 <?php endif; ?>
             </div>
+            
+            <?php if ($gameHistory && $gameHistory->rowCount() > 0): ?>
+                <div class="border-t pt-4">
+                    <h3 class="text-md font-semibold text-purple-600 mb-2">Historique des parties</h3>
+                    <button id="show-history" class="w-full py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 font-medium rounded-lg transition duration-200 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                        Voir l'historique (<?php echo $gameHistory->rowCount(); ?> parties)
+                    </button>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
-    
-    <!-- Historique des parties (caché par défaut) -->
-    <?php if ($gameHistory && $gameHistory->rowCount() > 0): ?>
-        <div id="history-section" class="mt-8 bg-white shadow-md rounded-lg overflow-hidden hidden">
-            <div class="p-6">
-                <h2 class="text-xl font-bold text-gray-800 mb-4">Historique de vos parties</h2>
-                
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Partie</th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adversaire</th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Résultat</th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            <?php while ($game = $gameHistory->fetch(PDO::FETCH_ASSOC)): ?>
-                                <?php
-                                // Déterminer si l'utilisateur est le joueur 1 ou 2
-                                $isPlayer1 = $game['player1_id'] == $user_id;
-                                
-                                // Déterminer l'adversaire
-                                $opponentName = $isPlayer1 ? $game['player2_name'] : $game['player1_name'];
-                                if ($game['player2_id'] === '0' || $game['player2_id'] === 0) {
-                                    $opponentName = 'IA';
-                                }
-                                
-                                // Déterminer le résultat
-                                $result = '';
-                                $resultClass = '';
-                                if ($game['winner_id'] == $user_id) {
-                                    $result = 'Victoire';
-                                    $resultClass = 'text-green-600';
-                                } elseif ($game['winner_id'] == null) {
-                                    $result = 'Match nul';
-                                    $resultClass = 'text-yellow-600';
-                                } else {
-                                    $result = 'Défaite';
-                                    $resultClass = 'text-red-600';
-                                }
-                                
-                                // Formater la date
-                                $date = new DateTime($game['created_at']);
-                                $formattedDate = $date->format('d/m/Y H:i');
-                                ?>
-                                <tr>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm font-medium text-gray-900">
-                                            #<?php echo $game['id']; ?>
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-900">
-                                            <?php echo htmlspecialchars($opponentName); ?>
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-500">
-                                            <?php echo $formattedDate; ?>
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full <?php echo $resultClass; ?>">
-                                            <?php echo $result; ?>
-                                        </span>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                        <a href="/game/board.php?id=<?php echo $game['id']; ?>&view=true" class="text-purple-600 hover:text-purple-900">
-                                            Voir le replay
-                                        </a>
-                                    </td>
-                                </tr>
-                            <?php endwhile; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    <?php endif; ?>
 </div>
 
-<!-- Modal de file d'attente -->
-<div id="queue-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
-    <div class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
-        <h3 class="text-xl font-bold text-indigo-600 mb-4">Recherche d'adversaire...</h3>
-        <div class="flex items-center justify-center mb-6">
-            <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
-        </div>
-        <p class="text-gray-700 mb-6 text-center">Veuillez patienter pendant que nous recherchons un adversaire pour vous.</p>
-        <div id="queue-status" class="text-center mb-4 text-sm font-medium text-indigo-600">
-            En recherche depuis 0 secondes...
-        </div>
-        <div class="flex justify-center">
-            <button id="cancel-queue" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition">Annuler</button>
+<!-- Historique des parties (caché par défaut) -->
+<?php if ($gameHistory && $gameHistory->rowCount() > 0): ?>
+    <div id="history-section" class="mt-8 bg-white shadow-md rounded-lg overflow-hidden hidden">
+        <div class="p-6">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Historique de vos parties</h2>
+            
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Partie</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adversaire</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Résultat</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <?php while ($game = $gameHistory->fetch(PDO::FETCH_ASSOC)): ?>
+                            <?php
+                            // Déterminer si l'utilisateur est le joueur 1 ou 2
+                            $isPlayer1 = $game['player1_id'] == $user_id;
+                            
+                            // Déterminer l'adversaire
+                            $opponentName = $isPlayer1 ? $game['player2_name'] : $game['player1_name'];
+                            if ($game['player2_id'] === '0' || $game['player2_id'] === 0) {
+                                $opponentName = 'IA';
+                            }
+                            
+                            // Déterminer le résultat
+                            $result = '';
+                            $resultClass = '';
+                            if ($game['winner_id'] == $user_id) {
+                                $result = 'Victoire';
+                                $resultClass = 'text-green-600';
+                            } elseif ($game['winner_id'] == null) {
+                                $result = 'Match nul';
+                                $resultClass = 'text-yellow-600';
+                            } else {
+                                $result = 'Défaite';
+                                $resultClass = 'text-red-600';
+                            }
+                            
+                            // Formater la date
+                            $date = new DateTime($game['created_at']);
+                            $formattedDate = $date->format('d/m/Y H:i');
+                            ?>
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm font-medium text-gray-900">
+                                        #<?php echo $game['id']; ?>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm text-gray-900">
+                                        <?php echo htmlspecialchars($opponentName); ?>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm text-gray-500">
+                                        <?php echo $formattedDate; ?>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full <?php echo $resultClass; ?>">
+                                        <?php echo $result; ?>
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <a href="/game/board.php?id=<?php echo $game['id']; ?>&view=true" class="text-purple-600 hover:text-purple-900">
+                                        Voir le replay
+                                    </a>
+                                </td>
+                            </tr>
+                        <?php endwhile; ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
-</div>
+<?php endif; ?>
 
 <!-- Modal de chargement pour IA -->
 <div id="loading-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
@@ -351,104 +334,13 @@ $pageTitle = "Jouer - " . APP_NAME;
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Variables pour la gestion de la file d'attente
-    const queueModal = document.getElementById('queue-modal');
-    const queueStatus = document.getElementById('queue-status');
-    const cancelQueueBtn = document.getElementById('cancel-queue');
-    const joinQueueBtn = document.getElementById('join-queue');
-    
     // Variables pour la gestion de la partie contre l'IA
     const playBotBtn = document.getElementById('play-bot');
     const loadingModal = document.getElementById('loading-modal');
     
-    // Variables pour l'historique
-    const showHistoryBtn = document.getElementById('show-history');
-    const historySection = document.getElementById('history-section');
-    
-    let queueStartTime = 0;
-    let queueInterval = null;
-    let checkMatchInterval = null;
-    
-    // Fonction pour mettre à jour le temps d'attente
-    function updateQueueTime() {
-        const elapsedSeconds = Math.floor((Date.now() - queueStartTime) / 1000);
-        queueStatus.innerText = `En recherche depuis ${elapsedSeconds} seconde${elapsedSeconds > 1 ? 's' : ''}...`;
-    }
-    
-    // Fonction pour rejoindre la file d'attente
-    function joinQueue() {
-        queueModal.classList.remove('hidden');
-        queueStartTime = Date.now();
-        
-        // Mettre à jour le temps d'attente toutes les secondes
-        queueInterval = setInterval(updateQueueTime, 1000);
-        
-        // Appeler l'API pour rejoindre la file d'attente
-        fetch('/api/game/queue.php?action=join')
-            .then(response => response.json())
-            .then(data => {
-                console.log('Rejoindre la file:', data);
-                
-                if (data.success) {
-                    // Vérifier toutes les 3 secondes si un match a été trouvé
-                    checkMatchInterval = setInterval(checkMatch, 3000);
-                } else {
-                    alert('Erreur: ' + data.message);
-                    quitQueue();
-                }
-            })
-            .catch(error => {
-                console.error('Erreur:', error);
-                alert('Une erreur est survenue lors de la connexion au serveur.');
-                quitQueue();
-            });
-    }
-    
-    // Fonction pour vérifier si un match a été trouvé
-    function checkMatch() {
-        fetch('/api/game/queue.php?action=check')
-            .then(response => response.json())
-            .then(data => {
-                console.log('Vérification de match:', data);
-                
-                if (data.success) {
-                    if (data.game_found && data.game_id) {
-                        // Match trouvé, rediriger vers la partie
-                        clearInterval(queueInterval);
-                        clearInterval(checkMatchInterval);
-                        window.location.href = '/game/board.php?id=' + data.game_id;
-                    }
-                } else {
-                    alert('Erreur: ' + data.message);
-                    quitQueue();
-                }
-            })
-            .catch(error => {
-                console.error('Erreur:', error);
-                alert('Une erreur est survenue lors de la vérification du match.');
-                quitQueue();
-            });
-    }
-    
-    // Fonction pour quitter la file d'attente
-    function quitQueue() {
-        queueModal.classList.add('hidden');
-        clearInterval(queueInterval);
-        clearInterval(checkMatchInterval);
-        
-        // Appeler l'API pour quitter la file d'attente
-        fetch('/api/game/queue.php?action=leave')
-            .then(response => response.json())
-            .then(data => {
-                console.log('Quitter la file:', data);
-            })
-            .catch(error => {
-                console.error('Erreur:', error);
-            });
-    }
-    
     // Fonction pour créer une partie contre l'IA
     function playAgainstBot() {
+        console.log('Clic sur le bouton IA détecté');
         loadingModal.classList.remove('hidden');
         
         fetch('/api/game/create_bot_game.php', {
@@ -458,9 +350,12 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             body: JSON.stringify({})
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('Réponse reçue:', response);
+            return response.json();
+        })
         .then(data => {
-            console.log('Création de partie contre IA:', data);
+            console.log('Données reçues:', data);
             
             if (data.success) {
                 // Rediriger vers la partie
@@ -477,32 +372,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Ajouter les écouteurs d'événements
-    joinQueueBtn.addEventListener('click', joinQueue);
-    cancelQueueBtn.addEventListener('click', quitQueue);
-    playBotBtn.addEventListener('click', playAgainstBot);
-    
-    // Gestion de l'historique
-    if (showHistoryBtn) {
-        showHistoryBtn.addEventListener('click', function() {
-            if (historySection.classList.contains('hidden')) {
-                historySection.classList.remove('hidden');
-                this.innerHTML = `
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
-                    </svg>
-                    Masquer l'historique
-                `;
-            } else {
-                historySection.classList.add('hidden');
-                this.innerHTML = `
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                    Voir l'historique (<?php echo $gameHistory->rowCount(); ?> parties)
-                `;
-            }
-        });
+    // Ajouter l'écouteur d'événement
+    if (playBotBtn) {
+        playBotBtn.addEventListener('click', playAgainstBot);
+        console.log('Écouteur configuré pour le bouton IA');
+    } else {
+        console.error('Bouton IA non trouvé');
     }
 });
 </script>

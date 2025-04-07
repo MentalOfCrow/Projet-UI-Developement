@@ -209,16 +209,41 @@ class GameController {
      */
     public function readGameHistory($playerId) {
         try {
+            error_log("Récupération de l'historique des parties pour le joueur ID: " . $playerId);
+            
             $query = "SELECT g.*, 
                       u1.username as player1_name, 
                       u2.username as player2_name 
                       FROM {$this->game->table} g
                       JOIN users u1 ON g.player1_id = u1.id
-                      JOIN users u2 ON g.player2_id = u2.id
+                      LEFT JOIN users u2 ON g.player2_id = u2.id
                       WHERE (g.player1_id = :player_id OR g.player2_id = :player_id) 
                       AND g.status = 'finished'
-                      ORDER BY g.created_at DESC";
+                      ORDER BY g.updated_at DESC";
+                      
+            error_log("Requête SQL pour l'historique: " . $query);
             
+            $stmt = $this->db->prepare($query);
+            $stmt->bindParam(':player_id', $playerId, PDO::PARAM_INT);
+            $stmt->execute();
+            
+            error_log("Nombre de parties trouvées: " . $stmt->rowCount());
+            
+            // Journaliser le contenu des résultats pour le débogage
+            $debugResults = [];
+            $resultsCopy = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($resultsCopy as $game) {
+                $debugResults[] = [
+                    'id' => $game['id'],
+                    'player1_id' => $game['player1_id'],
+                    'player2_id' => $game['player2_id'],
+                    'winner_id' => $game['winner_id'],
+                    'status' => $game['status']
+                ];
+            }
+            error_log("Résultats de l'historique: " . json_encode($debugResults));
+            
+            // Réexécuter la requête car fetchAll() a consommé tous les résultats
             $stmt = $this->db->prepare($query);
             $stmt->bindParam(':player_id', $playerId, PDO::PARAM_INT);
             $stmt->execute();
@@ -991,24 +1016,131 @@ class GameController {
      * Termine une partie et déclare un gagnant
      * @param int $game_id ID de la partie
      * @param int $winner_id ID du joueur gagnant
+     * @param int|null $loser_id ID du joueur perdant en cas d'abandon contre bot
      * @return bool Succès de l'opération
      */
-    public function endGame($game_id, $winner_id) {
+    public function endGame($game_id, $winner_id, $loser_id = null) {
         try {
-            $query = "UPDATE games SET 
+            // Démarrer une transaction
+            $this->db->beginTransaction();
+            
+            // Récupérer les informations de la partie
+            $query = "SELECT player1_id, player2_id FROM games WHERE id = :game_id";
+            $stmt = $this->db->prepare($query);
+            $stmt->bindParam(':game_id', $game_id);
+            $stmt->execute();
+            
+            $gameInfo = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$gameInfo) {
+                // La partie n'existe pas
+                $this->db->rollBack();
+                error_log("endGame: Partie introuvable avec l'ID: " . $game_id);
+                return false;
+            }
+            
+            error_log("endGame: Traitement de fin de partie ID: {$game_id}, winner_id: {$winner_id}, loser_id: " . ($loser_id ?? 'null'));
+            error_log("endGame: Infos partie - player1_id: {$gameInfo['player1_id']}, player2_id: {$gameInfo['player2_id']}");
+            
+            // Gérer spécifiquement le cas de l'abandon contre l'IA
+            if ($gameInfo['player2_id'] == 0 && $winner_id == 0) {
+                // Le joueur abandonne contre l'IA, donc le perdant est le joueur
+                $winner_id = null; // Nous utilisons null car l'IA n'a pas d'ID valide
+                $loser_id = $gameInfo['player1_id'];
+                error_log("endGame: Cas d'abandon contre l'IA détecté, le perdant est player1_id: {$loser_id}");
+            }
+            
+            // Mettre à jour le statut de la partie
+            $updateQuery = "UPDATE games SET 
                      status = 'finished', 
                      winner_id = :winner_id,
                      updated_at = NOW()
                      WHERE id = :game_id";
             
+            $updateStmt = $this->db->prepare($updateQuery);
+            $updateStmt->bindParam(':winner_id', $winner_id);
+            $updateStmt->bindParam(':game_id', $game_id);
+            
+            if (!$updateStmt->execute()) {
+                $this->db->rollBack();
+                error_log("endGame: Échec de la mise à jour du statut de la partie ID: " . $game_id);
+                return false;
+            }
+            
+            error_log("endGame: Statut de la partie mis à jour avec succès, statut: 'finished', winner_id: " . ($winner_id ?? 'null'));
+            
+            // Mettre à jour les statistiques manuellement (en plus du trigger)
+            $player1_id = $gameInfo['player1_id'];
+            $player2_id = $gameInfo['player2_id'];
+            
+            // Cas spécial d'abandon contre un bot
+            if ($loser_id !== null && $player2_id == 0) {
+                error_log("endGame: Cas spécial d'abandon contre bot confirmé. Joueur perdant ID: " . $loser_id);
+                // Le joueur a perdu contre le bot
+                $this->updatePlayerStats($loser_id, false);
+                
+                // Valider la transaction
+                $this->db->commit();
+                
+                error_log("Partie terminée avec succès (abandon contre bot). ID: " . $game_id . ", Perdant: " . $loser_id);
+                return true;
+            }
+            
+            // Mise à jour des statistiques du joueur 1
+            $player1Won = ($winner_id == $player1_id);
+            $this->updatePlayerStats($player1_id, $player1Won);
+            error_log("endGame: Statistiques du joueur 1 (ID: {$player1_id}) mises à jour, victoire: " . ($player1Won ? 'oui' : 'non'));
+            
+            // Mise à jour des statistiques du joueur 2 (seulement s'il n'est pas un bot, player_id != 0)
+            if ($player2_id != 0) {
+                $player2Won = ($winner_id == $player2_id);
+                $this->updatePlayerStats($player2_id, $player2Won);
+                error_log("endGame: Statistiques du joueur 2 (ID: {$player2_id}) mises à jour, victoire: " . ($player2Won ? 'oui' : 'non'));
+            }
+            
+            // Valider la transaction
+            $this->db->commit();
+            error_log("endGame: Transaction confirmée avec succès");
+            
+            return true;
+        } catch (PDOException $e) {
+            // En cas d'erreur, annuler la transaction
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            
+            error_log("Erreur dans endGame: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Met à jour les statistiques d'un joueur
+     * @param int $user_id ID du joueur
+     * @param bool $is_winner Indique si le joueur a gagné la partie
+     * @return bool Succès de l'opération
+     */
+    private function updatePlayerStats($user_id, $is_winner) {
+        try {
+            $query = "INSERT INTO stats (user_id, games_played, games_won, games_lost, last_game)
+                     VALUES (:user_id, 1, :games_won, :games_lost, NOW())
+                     ON DUPLICATE KEY UPDATE
+                     games_played = games_played + 1,
+                     games_won = games_won + :games_won,
+                     games_lost = games_lost + :games_lost,
+                     last_game = NOW()";
+                     
             $stmt = $this->db->prepare($query);
-            $stmt->bindParam(':winner_id', $winner_id);
-            $stmt->bindParam(':game_id', $game_id);
+            $games_won = $is_winner ? 1 : 0;
+            $games_lost = $is_winner ? 0 : 1;
+            
+            $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+            $stmt->bindParam(':games_won', $games_won, PDO::PARAM_INT);
+            $stmt->bindParam(':games_lost', $games_lost, PDO::PARAM_INT);
             
             return $stmt->execute();
             
         } catch (Exception $e) {
-            error_log("Erreur lors de la fin de partie: " . $e->getMessage());
+            error_log("Erreur lors de la mise à jour des statistiques: " . $e->getMessage());
             return false;
         }
     }

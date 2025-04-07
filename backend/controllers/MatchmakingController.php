@@ -231,4 +231,31 @@ class MatchmakingController {
         $stmt = $this->db->prepare("DELETE FROM queue WHERE user_id = ?");
         $stmt->execute([$user_id]);
     }
+    
+    /**
+     * Gère les actions de la file d'attente via un paramètre action
+     * @param array $data Données de la requête
+     * @return array Résultat de l'opération
+     */
+    public function handleQueueAction($data = []) {
+        // Récupérer l'action demandée
+        $action = isset($data['action']) ? $data['action'] : '';
+        
+        error_log("handleQueueAction appelée avec l'action: " . $action);
+        
+        // Traiter l'action
+        switch ($action) {
+            case 'join':
+                return $this->joinQueue($data);
+            case 'leave':
+                return $this->leaveQueue($data);
+            case 'check':
+                return $this->checkQueue($data);
+            default:
+                return [
+                    'success' => false,
+                    'message' => 'Action non reconnue'
+                ];
+        }
+    }
 }

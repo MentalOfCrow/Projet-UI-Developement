@@ -271,44 +271,69 @@ $pageTitle = "Jouer - " . APP_NAME;
                             // Déterminer le résultat
                             $result = '';
                             $resultClass = '';
+                            $resultBadgeClass = '';
+                            $resultIcon = '';
+                            
                             if ($game['winner_id'] == $user_id) {
                                 $result = 'Victoire';
                                 $resultClass = 'text-green-600';
+                                $resultBadgeClass = 'bg-green-100 border-green-500';
+                                $resultIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                </svg>';
                             } elseif ($game['winner_id'] == null) {
                                 $result = 'Match nul';
                                 $resultClass = 'text-yellow-600';
+                                $resultBadgeClass = 'bg-yellow-100 border-yellow-500';
+                                $resultIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
+                                </svg>';
                             } else {
                                 $result = 'Défaite';
                                 $resultClass = 'text-red-600';
+                                $resultBadgeClass = 'bg-red-100 border-red-500';
+                                $resultIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                </svg>';
                             }
                             
                             // Formater la date
                             $date = new DateTime($game['created_at']);
                             $formattedDate = $date->format('d/m/Y H:i');
                             ?>
-                            <tr>
+                            <tr class="hover:bg-gray-50 transition-colors">
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <div class="text-sm font-medium text-gray-900">
                                         #<?php echo $game['id']; ?>
                                     </div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="text-sm text-gray-900">
+                                    <div class="text-sm text-gray-900 font-medium">
                                         <?php echo htmlspecialchars($opponentName); ?>
+                                    </div>
+                                    <div class="text-xs text-gray-500">
+                                        <?php echo $game['player2_id'] === '0' || $game['player2_id'] === 0 ? 'Intelligence Artificielle' : 'Joueur humain'; ?>
                                     </div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="text-sm text-gray-500">
+                                    <div class="text-sm text-gray-900">
                                         <?php echo $formattedDate; ?>
                                     </div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full <?php echo $resultClass; ?>">
-                                        <?php echo $result; ?>
-                                    </span>
+                                    <div class="flex items-center">
+                                        <span class="px-3 py-2 inline-flex items-center text-sm leading-5 font-semibold rounded-lg border <?php echo $resultBadgeClass; ?> <?php echo $resultClass; ?>">
+                                            <?php echo $resultIcon; ?>
+                                            <?php echo $result; ?>
+                                        </span>
+                                    </div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                    <a href="/game/board.php?id=<?php echo $game['id']; ?>&view=true" class="text-purple-600 hover:text-purple-900">
+                                    <a href="/game/board.php?id=<?php echo $game['id']; ?>&view=true" class="text-purple-600 hover:text-purple-900 flex items-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                            <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                                        </svg>
                                         Voir le replay
                                     </a>
                                 </td>
@@ -337,6 +362,30 @@ document.addEventListener('DOMContentLoaded', function() {
     // Variables pour la gestion de la partie contre l'IA
     const playBotBtn = document.getElementById('play-bot');
     const loadingModal = document.getElementById('loading-modal');
+    
+    // Afficher automatiquement l'historique si l'URL contient #history-section
+    if (window.location.hash === '#history-section') {
+        const historySection = document.getElementById('history-section');
+        if (historySection) {
+            historySection.classList.remove('hidden');
+            // Faire défiler jusqu'à la section
+            historySection.scrollIntoView({ behavior: 'smooth' });
+        }
+    }
+    
+    // Gestion du bouton d'affichage de l'historique
+    const showHistoryBtn = document.getElementById('show-history');
+    if (showHistoryBtn) {
+        showHistoryBtn.addEventListener('click', function() {
+            const historySection = document.getElementById('history-section');
+            if (historySection) {
+                historySection.classList.toggle('hidden');
+                if (!historySection.classList.contains('hidden')) {
+                    historySection.scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+        });
+    }
     
     // Fonction pour créer une partie contre l'IA
     function playAgainstBot() {

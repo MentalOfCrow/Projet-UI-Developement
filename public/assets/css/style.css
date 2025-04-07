@@ -1,4 +1,41 @@
 /* Style amélioré pour le jeu de dames */
+:root {
+    --primary-color: #6644c1; /* Couleur principale (violet) */
+    --primary-dark: #5a3db4;  /* Violet foncé */
+    --primary-light: #7b5ecc;  /* Violet clair */
+    --accent-color: #8c68e3;  /* Couleur d'accent */
+    --bg-color: #f8f7fc;      /* Fond légèrement violet */
+    --text-color: #333333;    /* Texte principal */
+}
+
+/* Styles de base */
+body {
+    background-color: var(--bg-color);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    color: var(--text-color);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+main {
+    flex: 1;
+}
+
+a {
+    transition: all 0.2s ease;
+}
+
+a:hover {
+    opacity: 0.9;
+}
+
+.container {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1rem;
+}
 
 /* Styles pour le plateau */
 #board {
@@ -26,7 +63,7 @@
 
 /* Style pour la pièce sélectionnée */
 .piece.selected .w-12 {
-    box-shadow: 0 0 0 3px #ffeb3b, 0 6px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 0 0 3px var(--accent-color), 0 6px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* Styles pour les indicateurs de mouvement */
@@ -58,13 +95,13 @@
 }
 
 /* Styles pour les cartes d'information */
-.bg-white.shadow-md {
+.bg-white.shadow-md, .shadow-md {
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     transition: all 0.3s ease;
 }
 
-.bg-white.shadow-md:hover {
+.bg-white.shadow-md:hover, .shadow-md:hover {
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
@@ -142,7 +179,7 @@
 }
 
 .divide-y.divide-gray-200 li:hover {
-    background-color: rgba(79, 70, 229, 0.05);
+    background-color: rgba(106, 68, 196, 0.05);
 }
 
 /* Style pour les tableaux de l'historique */
@@ -156,7 +193,128 @@ table tbody tr {
 }
 
 table tbody tr:hover {
-    background-color: rgba(79, 70, 229, 0.05);
+    background-color: rgba(106, 68, 196, 0.05);
+}
+
+/* Styles pour la page de profil */
+.profile-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem;
+    background-color: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.profile-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.profile-avatar {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background-color: var(--primary-color);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    margin-right: 2rem;
+}
+
+.profile-info h1 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--primary-color);
+}
+
+.profile-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background-color: white;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    text-align: center;
+    border: 1px solid #f0f0f0;
+}
+
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    color: #6b7280;
+    text-transform: uppercase;
+    font-size: 0.875rem;
+    letter-spacing: 0.05em;
+}
+
+.recent-games h2 {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+}
+
+.button-primary {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    transition: background-color 0.3s ease;
+    display: inline-block;
+}
+
+.button-primary:hover {
+    background-color: var(--primary-dark);
+}
+
+/* Badge d'état de connexion */
+.connection-status {
+    position: relative;
+}
+
+.connection-status::after {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #10b981; /* vert pour connecté */
+    bottom: 0;
+    right: -5px;
+}
+
+.connection-status.offline::after {
+    background-color: #ef4444; /* rouge pour déconnecté */
+}
+
+/* Styles pour le jeu de dames */
+.checkerboard .square {
+    position: relative;
+}
+
+.checkerboard .piece {
+    position: relative;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.checkerboard .piece:hover {
+    transform: scale(1.1);
 }
 
 /* Responsive adjustments */
@@ -172,5 +330,19 @@ table tbody tr:hover {
     
     .selectable-piece:hover {
         transform: translateY(-2px);
+    }
+    
+    .profile-header {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .profile-avatar {
+        margin-right: 0;
+        margin-bottom: 1rem;
+    }
+    
+    .profile-stats {
+        grid-template-columns: 1fr;
     }
 }

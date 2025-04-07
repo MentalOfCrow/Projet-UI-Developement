@@ -12,6 +12,9 @@ $pageTitle = "Recherche de partie - " . APP_NAME;
 include __DIR__ . '/../../backend/includes/header.php';
 ?>
 
+<!-- Espace blanc en haut de la page -->
+<div class="h-16 bg-gray-50"></div>
+
 <div class="container mx-auto px-4 py-8">
     <div class="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
         <h1 class="text-2xl font-bold text-indigo-600 mb-6 text-center">

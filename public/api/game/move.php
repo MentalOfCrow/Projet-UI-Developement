@@ -80,13 +80,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Déterminer le gagnant (l'adversaire du joueur qui abandonne)
         $winner_id = ($user_id == $game['player1_id']) ? $game['player2_id'] : $game['player1_id'];
         
-        // Si l'adversaire est un bot (player2_id = 0), définir le gagnant à 0
+        // Si l'adversaire est un bot (player2_id = 0), définir le gagnant correctement
+        // Dans le cas d'un abandon contre un bot, nous considérons que le bot a gagné
+        // mais nous devons utiliser un ID valide pour mettre à jour les statistiques
         if ($winner_id == 0) {
-            $winner_id = 0;
+            // Dans ce cas, nous allons utiliser un ID spécial: le joueur qui abandonne est perdant
+            // mais le gagnant est techniquement l'IA (player2_id=0)
+            // Nous utilisons NULL pour indiquer que personne n'a vraiment gagné (= défaite du joueur)
+            if ($game['player2_id'] == 0) {
+                // Le bot est player2, donc c'est player1 qui abandonne
+                // Le gagnant est null, mais on mettra à jour les stats dans endGame
+                $specialCase = true;
+                error_log("Abandon contre bot: le joueur " . $user_id . " a abandonné contre l'IA");
+            }
         }
         
         // Mettre fin à la partie
-        $result = $gameController->endGame($game_id, $winner_id);
+        $result = $gameController->endGame($game_id, $winner_id, isset($specialCase) ? $user_id : null);
+        
+        // Log détaillé du résultat de l'abandon pour débogage
+        error_log("Résultat de l'abandon : " . json_encode($result));
         
         // Nettoyer le tampon avant de répondre
         ob_end_clean();

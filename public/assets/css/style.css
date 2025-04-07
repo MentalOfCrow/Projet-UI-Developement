@@ -23,6 +23,7 @@ body {
 
 main {
     flex: 1;
+    padding-bottom: 2rem; /* Réduit de 4rem à 2rem */
 }
 
 a {
@@ -48,6 +49,19 @@ nav, footer {
     padding: 0 !important;
     border-radius: 0 !important;
     box-sizing: border-box;
+}
+
+footer {
+    margin-top: 2rem !important; /* Réduit de 4rem à 2rem */
+    padding-top: 1rem !important; /* Réduit de 2rem à 1rem */
+    width: 100vw !important;
+    margin-left: calc(-50vw + 50%) !important;
+    margin-right: calc(-50vw + 50%) !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    box-sizing: border-box !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
 }
 
 .nav-full-width {

@@ -700,46 +700,47 @@ document.addEventListener('DOMContentLoaded', function() {
             document.body.removeChild(loadingIndicator);
             
             if (data.success) {
-                // Afficher un message d'abandon
-                const resignMessage = document.createElement('div');
-                resignMessage.className = 'fixed inset-0 bg-red-500 bg-opacity-20 flex items-center justify-center z-50';
-                resignMessage.innerHTML = `
-                    <div class="bg-white p-6 rounded-lg shadow-lg max-w-md text-center">
-                        <div class="w-16 h-16 bg-red-100 rounded-full mx-auto flex items-center justify-center mb-4">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                // Message de confirmation
+                const confirmationMessage = document.createElement('div');
+                confirmationMessage.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+                confirmationMessage.innerHTML = `
+                    <div class="bg-white p-6 rounded-lg shadow-lg max-w-md">
+                        <h3 class="text-xl font-bold text-red-600 mb-4">Partie abandonnée</h3>
+                        <p class="mb-4">Vous avez abandonné cette partie.</p>
+                        <p class="mb-6">Redirection vers la page des parties...</p>
+                        <div class="w-full bg-gray-200 rounded-full h-2.5">
+                            <div class="bg-red-600 h-2.5 rounded-full" style="width: 0%" id="progress-bar"></div>
                         </div>
-                        <h3 class="text-xl font-bold text-gray-900 mb-2">Partie abandonnée</h3>
-                        <p class="text-gray-600 mb-4">Vous avez déclaré forfait. Cette partie sera enregistrée comme une défaite dans votre historique.</p>
-                        <button id="goToHistory" class="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition">
-                            Retourner à mes parties
-                        </button>
                     </div>
                 `;
-                document.body.appendChild(resignMessage);
+                document.body.appendChild(confirmationMessage);
                 
-                // Ajouter un écouteur pour le bouton
-                document.getElementById('goToHistory').addEventListener('click', () => {
-                    window.location.href = '/game/play.php?message=' + encodeURIComponent('Vous avez abandonné la partie.');
-                });
-                
-                // Rediriger automatiquement après 3 secondes
-                setTimeout(() => {
-                    window.location.href = '/game/play.php?message=' + encodeURIComponent('Vous avez abandonné la partie.');
-                }, 3000);
+                // Animation de la barre de progression
+                const progressBar = document.getElementById('progress-bar');
+                let progress = 0;
+                const interval = setInterval(() => {
+                    progress += 5;
+                    if (progressBar) progressBar.style.width = progress + '%';
+                    if (progress >= 100) {
+                        clearInterval(interval);
+                        // Redirection vers la page des parties
+                        window.location.href = '/game/play.php';
+                    }
+                }, 50);
             } else {
-                alert('Erreur lors de l\'abandon: ' + data.message);
+                alert('Erreur lors de l\'abandon de la partie: ' + data.message);
+                // Masquer la modal d'abandon
                 abandonModal.classList.add('hidden');
             }
         })
         .catch(error => {
-            console.error('Erreur:', error);
+            console.error('Erreur lors de l\'abandon:', error);
             
             // Supprimer l'indicateur de chargement
             document.body.removeChild(loadingIndicator);
             
-            alert('Une erreur est survenue lors de l\'abandon.');
+            alert('Une erreur est survenue lors de l\'abandon de la partie.');
+            // Masquer la modal d'abandon
             abandonModal.classList.add('hidden');
         });
     });

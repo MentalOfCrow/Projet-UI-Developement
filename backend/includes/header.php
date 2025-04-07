@@ -14,12 +14,12 @@
     <!-- Custom CSS -->
     <link href="/assets/css/style.css" rel="stylesheet">
 </head>
-<body class="flex flex-col min-h-screen">
+<body class="flex flex-col min-h-screen m-0 p-0 overflow-x-hidden">
     <!-- Barre de navigation -->
-    <nav class="bg-purple-800 text-white shadow-md">
+    <nav class="bg-purple-900 text-white w-screen" style="min-width: 100%; border-radius: 0;">
         <div class="container mx-auto px-4">
             <div class="flex justify-between items-center py-4">
-                <a href="/" class="text-xl font-bold"><?php echo APP_NAME; ?></a>
+                <a href="/" class="text-xl font-bold">Jeu de Dames</a>
                 
                 <div class="hidden md:flex space-x-6">
                     <a href="/" class="hover:text-purple-200 transition">Accueil</a>
@@ -32,14 +32,14 @@
                 <div class="flex items-center space-x-4">
                     <?php if (Session::isLoggedIn()): ?>
                         <div x-data="{ open: false }" class="relative">
-                            <button @click="open = !open" class="flex items-center space-x-2 focus:outline-none bg-purple-700 px-3 py-1 rounded-full">
+                            <button @click="open = !open" class="flex items-center space-x-2 focus:outline-none bg-purple-800 px-3 py-1" style="border-radius: 0;">
                                 <span class="connection-status"><?php echo Session::getUsername(); ?></span>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                                 </svg>
                             </button>
                             
-                            <div x-show="open" @click.away="open = false" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
+                            <div x-show="open" @click.away="open = false" class="absolute right-0 mt-2 w-48 bg-white shadow-lg py-1 z-10" style="border-radius: 0;">
                                 <div class="px-4 py-2 text-sm text-gray-500 border-b border-gray-200">
                                     Connecté en tant que <?php echo Session::getUsername(); ?>
                                 </div>
@@ -71,7 +71,7 @@
                             </svg>
                             Connexion
                         </a>
-                        <a href="/auth/register.php" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition flex items-center">
+                        <a href="/auth/register.php" class="bg-purple-700 text-white px-4 py-2 hover:bg-purple-800 transition flex items-center" style="border-radius: 0;">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                             </svg>
@@ -88,7 +88,7 @@
                         </svg>
                     </button>
                     
-                    <div x-show="open" @click.away="open = false" class="absolute top-16 right-0 left-0 bg-purple-800 shadow-md z-10">
+                    <div x-show="open" @click.away="open = false" class="absolute top-16 right-0 left-0 bg-purple-900 shadow-md z-10">
                         <div class="container mx-auto px-4 py-2">
                             <a href="/" class="block py-2 hover:text-purple-200 transition">Accueil</a>
                             <a href="/game/play.php" class="block py-2 hover:text-purple-200 transition">Jouer</a>

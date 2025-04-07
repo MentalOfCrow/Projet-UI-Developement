@@ -61,6 +61,13 @@ $routes = [
         'controller' => 'GameController',
         'method' => 'getGameStatus',
         'ajax' => true
+    ],
+    
+    // Nouvelle route pour queue.php
+    '/api/game/queue.php' => [
+        'controller' => 'MatchmakingController',
+        'method' => 'handleQueueAction',
+        'ajax' => true
     ]
 ];
 

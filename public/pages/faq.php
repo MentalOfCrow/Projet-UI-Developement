@@ -6,36 +6,36 @@ $pageTitle = "FAQ - " . APP_NAME;
 
 <?php include __DIR__ . '/../../backend/includes/header.php'; ?>
 
-<div class="container mx-auto px-4 py-8">
-    <h1 class="text-3xl font-bold text-indigo-600 mb-8">Questions fréquemment posées</h1>
+<div class="container mx-auto px-4 py-8 mt-2 pt-4">
+    <h1 class="text-3xl font-bold text-purple-600 mb-8">Questions fréquemment posées</h1>
     
     <div class="bg-white rounded-lg shadow-md p-6 mb-8" x-data="{ activeTab: 'general' }">
         <!-- Onglets de navigation -->
         <div class="flex flex-wrap border-b mb-6">
             <button 
                 @click="activeTab = 'general'" 
-                :class="{ 'text-indigo-600 border-b-2 border-indigo-600': activeTab === 'general', 'text-gray-500 hover:text-indigo-500': activeTab !== 'general' }"
+                :class="{ 'text-purple-600 border-b-2 border-purple-600': activeTab === 'general', 'text-gray-500 hover:text-purple-500': activeTab !== 'general' }"
                 class="mr-6 py-2 font-medium"
             >
                 Général
             </button>
             <button 
                 @click="activeTab = 'account'" 
-                :class="{ 'text-indigo-600 border-b-2 border-indigo-600': activeTab === 'account', 'text-gray-500 hover:text-indigo-500': activeTab !== 'account' }"
+                :class="{ 'text-purple-600 border-b-2 border-purple-600': activeTab === 'account', 'text-gray-500 hover:text-purple-500': activeTab !== 'account' }"
                 class="mr-6 py-2 font-medium"
             >
                 Compte et Inscription
             </button>
             <button 
                 @click="activeTab = 'gameplay'" 
-                :class="{ 'text-indigo-600 border-b-2 border-indigo-600': activeTab === 'gameplay', 'text-gray-500 hover:text-indigo-500': activeTab !== 'gameplay' }"
+                :class="{ 'text-purple-600 border-b-2 border-purple-600': activeTab === 'gameplay', 'text-gray-500 hover:text-purple-500': activeTab !== 'gameplay' }"
                 class="mr-6 py-2 font-medium"
             >
                 Règles du jeu
             </button>
             <button 
                 @click="activeTab = 'technical'" 
-                :class="{ 'text-indigo-600 border-b-2 border-indigo-600': activeTab === 'technical', 'text-gray-500 hover:text-indigo-500': activeTab !== 'technical' }"
+                :class="{ 'text-purple-600 border-b-2 border-purple-600': activeTab === 'technical', 'text-gray-500 hover:text-purple-500': activeTab !== 'technical' }"
                 class="py-2 font-medium"
             >
                 Technique
@@ -160,15 +160,15 @@ $pageTitle = "FAQ - " . APP_NAME;
     
     <!-- Section de contact -->
     <div class="mt-12 bg-white rounded-lg shadow-md p-6">
-        <h2 class="text-2xl font-bold text-indigo-600 mb-4">Vous n'avez pas trouvé de réponse à votre question ?</h2>
+        <h2 class="text-2xl font-bold text-purple-600 mb-4">Vous n'avez pas trouvé de réponse à votre question ?</h2>
         <p class="text-gray-600 mb-6">
             Si vous avez d'autres questions ou besoin d'assistance, n'hésitez pas à nous contacter. Notre équipe est à votre disposition pour vous aider.
         </p>
         <div class="flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-purple-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
-            <a href="mailto:contact@jeudedames.fr" class="text-indigo-600 hover:underline">contact@jeudedames.fr</a>
+            <a href="mailto:contact@jeudedames.fr" class="text-purple-600 hover:underline">contact@jeudedames.fr</a>
         </div>
     </div>
 </div>

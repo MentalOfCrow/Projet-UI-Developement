@@ -497,65 +497,145 @@ class GameController {
         $row_distance = $to_row - $from_row;
         $col_distance = abs($to_col - $from_col);
         
-        // Vérifier si c'est un mouvement de capture
-        $capture = false;
-        $captured = null;
+        // Vérifier si le mouvement est en diagonale (la distance en lignes et colonnes doit être égale)
+        if (abs($row_distance) != $col_distance) {
+            return [
+                'valid' => false,
+                'message' => 'Les pièces doivent se déplacer en diagonale.'
+            ];
+        }
         
-        // Si la distance est de 2 cases en diagonale, c'est potentiellement une capture
-        if (abs($row_distance) == 2 && $col_distance == 2) {
-            // Calculer la position de la pièce capturée
-            $capture_row = $from_row + ($row_distance / 2);
-            $capture_col = $from_col + (($to_col - $from_col) / 2);
-            
-            // Vérifier si la case contient une pièce adverse
-            if (isset($board[$capture_row][$capture_col]) && 
-                is_array($board[$capture_row][$capture_col]) &&
-                isset($board[$capture_row][$capture_col]['player']) && 
-                $board[$capture_row][$capture_col]['player'] != $player) {
+        // Logique pour les pions (non-rois)
+        if (!$isKing) {
+            // Si c'est un déplacement simple (distance de 1)
+            if (abs($row_distance) == 1) {
+                // Vérifier si le joueur est obligé de capturer ailleurs
+                if ($this->hasForcedCapture($board, $player)) {
+                    return [
+                        'valid' => false,
+                        'message' => 'Vous avez une capture obligatoire à effectuer.'
+                    ];
+                }
                 
-                $capture = true;
-                $captured = [
-                    'row' => $capture_row,
-                    'col' => $capture_col
+                // Pour les pions, vérifier qu'ils se déplacent uniquement dans leur direction
+                if (($player == 1 && $row_distance < 0) || ($player == 2 && $row_distance > 0)) {
+                    return [
+                        'valid' => false,
+                        'message' => 'Les pions ne peuvent se déplacer que vers l\'avant.'
+                    ];
+                }
+                
+                // Mouvement simple valide pour un pion
+                return [
+                    'valid' => true,
+                    'message' => 'Mouvement valide.',
+                    'capture' => false
                 ];
+            }
+            // Si c'est un mouvement de capture (distance de 2)
+            else if (abs($row_distance) == 2) {
+                // Calculer la position de la pièce à capturer
+                $capture_row = $from_row + ($row_distance / 2);
+                $capture_col = $from_col + (($to_col - $from_col) / 2);
+                
+                // Vérifier si la case intermédiaire contient une pièce adverse
+                if (isset($board[$capture_row][$capture_col]) && 
+                    is_array($board[$capture_row][$capture_col]) &&
+                    isset($board[$capture_row][$capture_col]['player']) && 
+                    $board[$capture_row][$capture_col]['player'] != $player) {
+                    
+                    // Capture valide pour un pion
+                    return [
+                        'valid' => true,
+                        'message' => 'Capture valide.',
+                        'capture' => true,
+                        'captured' => [
+                            'row' => $capture_row,
+                            'col' => $capture_col
+                        ]
+                    ];
+                } else {
+                    return [
+                        'valid' => false,
+                        'message' => 'Aucune pièce adverse à capturer.'
+                    ];
+                }
             } else {
                 return [
                     'valid' => false,
-                    'message' => 'Aucune pièce adverse à capturer.'
+                    'message' => 'Mouvement invalide pour un pion.'
                 ];
             }
         }
-        // Si ce n'est pas une capture, vérifier les règles de mouvement standard
-        elseif (abs($row_distance) == 1 && $col_distance == 1) {
-            // Vérifier si le joueur est obligé de capturer ailleurs
-            if ($this->hasForcedCapture($board, $player)) {
+        // Logique pour les dames
+        else {
+            // Vérifier si le joueur est obligé de capturer ailleurs (pour un déplacement simple)
+            if (abs($row_distance) == 1 && $this->hasForcedCapture($board, $player)) {
                 return [
                     'valid' => false,
                     'message' => 'Vous avez une capture obligatoire à effectuer.'
                 ];
             }
             
-            // Pour les pions, vérifier qu'ils se déplacent uniquement dans leur direction (sauf pour les captures)
-            if (!$isKing && (($player == 1 && $row_distance < 0) || ($player == 2 && $row_distance > 0))) {
+            // Déterminer la direction du mouvement
+            $row_dir = ($row_distance > 0) ? 1 : -1;
+            $col_dir = ($to_col > $from_col) ? 1 : -1;
+            
+            // Vérifier si le chemin est libre pour un déplacement simple
+            $current_row = $from_row + $row_dir;
+            $current_col = $from_col + $col_dir;
+            $capture = false;
+            $captured = null;
+            
+            while ($current_row != $to_row && $current_col != $to_col) {
+                // Si une pièce est sur le chemin
+                if (isset($board[$current_row][$current_col]) && $board[$current_row][$current_col] !== null) {
+                    // Si c'est déjà la deuxième pièce sur le chemin, le mouvement est invalide
+                    if ($capture) {
+                        return [
+                            'valid' => false,
+                            'message' => 'Une dame ne peut pas sauter par-dessus plusieurs pièces.'
+                        ];
+                    }
+                    
+                    // Si c'est une pièce du même joueur, le mouvement est invalide
+                    if ($board[$current_row][$current_col]['player'] == $player) {
+                        return [
+                            'valid' => false,
+                            'message' => 'Une dame ne peut pas sauter par-dessus ses propres pièces.'
+                        ];
+                    }
+                    
+                    // C'est une pièce adverse, c'est potentiellement une capture
+                    $capture = true;
+                    $captured = [
+                        'row' => $current_row,
+                        'col' => $current_col
+                    ];
+                }
+                
+                // Avancer vers la destination
+                $current_row += $row_dir;
+                $current_col += $col_dir;
+            }
+            
+            // Si on a trouvé une capture et qu'on arrive à destination, c'est une capture valide
+            if ($capture) {
                 return [
-                    'valid' => false,
-                    'message' => 'Les pions ne peuvent se déplacer que vers l\'avant.'
+                    'valid' => true,
+                    'message' => 'Capture valide pour une dame.',
+                    'capture' => true,
+                    'captured' => $captured
                 ];
             }
-        } else {
+            
+            // Si aucune pièce n'a été rencontrée, c'est un déplacement simple valide
             return [
-                'valid' => false,
-                'message' => 'Mouvement invalide. Les pièces ne peuvent se déplacer qu\'en diagonale.'
+                'valid' => true,
+                'message' => 'Mouvement valide pour une dame.',
+                'capture' => false
             ];
         }
-        
-        // Si toutes les vérifications sont passées, le mouvement est valide
-        return [
-            'valid' => true,
-            'message' => $capture ? 'Capture valide.' : 'Mouvement valide.',
-            'capture' => $capture,
-            'captured' => $captured
-        ];
     }
     
     /**
@@ -593,69 +673,100 @@ class GameController {
      * @param int $player Joueur propriétaire de la pièce
      * @return bool True si la pièce peut capturer
      */
-    private function canCaptureFrom($board, $row, $col, $player) {
-        // Vérifier si la case contient une pièce du joueur
-        if (!isset($board[$row][$col]) || 
-            !is_array($board[$row][$col]) || 
-            !isset($board[$row][$col]['player']) || 
-            $board[$row][$col]['player'] != $player) {
+    public function canCaptureFrom($board, $row, $col, $player) {
+        if (!isset($board[$row][$col]) || !is_array($board[$row][$col]) || $board[$row][$col]['player'] != $player) {
             return false;
         }
-        
-        // Déterminer si la pièce est une dame
+
         $isKing = isset($board[$row][$col]['type']) && $board[$row][$col]['type'] === 'king';
-        
-        // Directions possibles pour la capture (diagonales)
         $directions = [
-            [1, 1], [1, -1], [-1, 1], [-1, -1]
+            ['row' => -1, 'col' => -1], // Haut-Gauche
+            ['row' => -1, 'col' => 1],  // Haut-Droite
+            ['row' => 1, 'col' => -1],  // Bas-Gauche
+            ['row' => 1, 'col' => 1]    // Bas-Droite
         ];
-        
-        // Pour les pions, limiter aux directions avant
+
+        // Pour les pions normaux, on ne vérifie que les directions avant pour le joueur 1 et arrière pour joueur 2
         if (!$isKing) {
             if ($player == 1) {
-                // Joueur 1 (pions noirs) - seulement vers le bas
-                $directions = [
-                    [1, 1], [1, -1]
-                ];
+                // Joueur 1 se déplace vers le bas du plateau
+                $directions = array_slice($directions, 2, 2); // Uniquement Bas-Gauche et Bas-Droite
             } else {
-                // Joueur 2 (pions blancs) - seulement vers le haut
-                $directions = [
-                    [-1, 1], [-1, -1]
-                ];
+                // Joueur 2 se déplace vers le haut du plateau
+                $directions = array_slice($directions, 0, 2); // Uniquement Haut-Gauche et Haut-Droite
             }
         }
-        
-        // Vérifier chaque direction
+
         foreach ($directions as $dir) {
-            $check_row = $row + $dir[0];
-            $check_col = $col + $dir[1];
-            
-            // Vérifier si la case voisine est dans les limites du plateau
-            if ($check_row >= 0 && $check_row < 8 && $check_col >= 0 && $check_col < 8) {
-                // Vérifier si la case voisine contient une pièce adverse
-                if (isset($board[$check_row][$check_col]) && 
-                    is_array($board[$check_row][$check_col]) && 
-                    isset($board[$check_row][$check_col]['player']) && 
-                    $board[$check_row][$check_col]['player'] != $player) {
+            // Pour les pions, on vérifie seulement une case plus loin
+            if (!$isKing) {
+                $captureRow = $row + $dir['row'];
+                $captureCol = $col + $dir['col'];
+                $landingRow = $row + 2 * $dir['row'];
+                $landingCol = $col + 2 * $dir['col'];
+
+                // Vérifier si la position de capture est dans les limites du plateau
+                if ($captureRow < 0 || $captureRow > 7 || $captureCol < 0 || $captureCol > 7) {
+                    continue;
+                }
+
+                // Vérifier si la position d'atterrissage est dans les limites du plateau
+                if ($landingRow < 0 || $landingRow > 7 || $landingCol < 0 || $landingCol > 7) {
+                    continue;
+                }
+
+                // Vérifier s'il y a une pièce adverse à capturer
+                if (isset($board[$captureRow][$captureCol]) && 
+                    is_array($board[$captureRow][$captureCol]) && 
+                    isset($board[$captureRow][$captureCol]['player']) && 
+                    $board[$captureRow][$captureCol]['player'] != $player) {
                     
-                    // Vérifier si la case après l'adversaire est libre
-                    $land_row = $check_row + $dir[0];
-                    $land_col = $check_col + $dir[1];
-                    
-                    if ($land_row >= 0 && $land_row < 8 && $land_col >= 0 && $land_col < 8) {
-                        if (!isset($board[$land_row][$land_col]) || $board[$land_row][$land_col] === null) {
-                            return true; // Capture possible
-                        }
+                    // Vérifier si la case d'atterrissage est vide
+                    if (!isset($board[$landingRow][$landingCol]) || $board[$landingRow][$landingCol] === null) {
+                        return true;
                     }
                 }
             }
+            // Pour les dames, on vérifie sur toute la diagonale
+            else {
+                $currentRow = $row + $dir['row'];
+                $currentCol = $col + $dir['col'];
+                $foundOpponent = false;
+                $captureRow = -1;
+                $captureCol = -1;
+
+                // Parcourir la diagonale
+                while ($currentRow >= 0 && $currentRow <= 7 && $currentCol >= 0 && $currentCol <= 7) {
+                    // Si on trouve une pièce
+                    if (isset($board[$currentRow][$currentCol]) && $board[$currentRow][$currentCol] !== null) {
+                        // Si on a déjà trouvé une pièce adverse, on ne peut pas capturer celle-ci
+                        if ($foundOpponent) {
+                            break;
+                        }
+                        
+                        // Si c'est une pièce du même joueur, on ne peut pas capturer dans cette direction
+                        if ($board[$currentRow][$currentCol]['player'] == $player) {
+                            break;
+                        }
+                        
+                        // C'est une pièce adverse, on peut potentiellement la capturer
+                        $foundOpponent = true;
+                        $captureRow = $currentRow;
+                        $captureCol = $currentCol;
+                    } 
+                    // Si on trouve une case vide après avoir trouvé une pièce adverse
+                    else if ($foundOpponent) {
+                        // On peut capturer la pièce adverse
+                        return true;
+                    }
+                    
+                    // Continuer dans la direction
+                    $currentRow += $dir['row'];
+                    $currentCol += $dir['col'];
+                }
+            }
         }
-        
-        // Pour les dames, vérifier aussi les captures à distance
-        if ($isKing) {
-            // TODO: Implémenter la logique pour les captures à distance des dames
-        }
-        
+
         return false;
     }
     
@@ -1112,6 +1223,7 @@ class GameController {
                     
                     // Vérifier si la pièce a un type
                     $pieceType = isset($board[$row][$col]['type']) ? $board[$row][$col]['type'] : 'pawn';
+                    $isKing = ($pieceType === 'king');
                     
                     // Directions pour les mouvements
                     $directions = [];
@@ -1128,44 +1240,109 @@ class GameController {
                         $directions = [[1, -1], [1, 1], [-1, -1], [-1, 1]];
                     }
                     
-                    // Vérifier les mouvements simples (1 case)
-                    foreach ($directions as $dir) {
-                        $newRow = $row + $dir[0];
-                        $newCol = $col + $dir[1];
-                        
-                        // Vérifier que la destination est dans les limites du plateau
-                        if ($newRow >= 0 && $newRow < 8 && $newCol >= 0 && $newCol < 8) {
-                            // Vérifier si la case est vide
-                            if (!isset($board[$newRow][$newCol]) || $board[$newRow][$newCol] === null) {
-                                $possibleMoves[] = [
-                                    'fromRow' => $row,
-                                    'fromCol' => $col,
-                                    'toRow' => $newRow,
-                                    'toCol' => $newCol
-                                ];
-                            } 
-                            // Si la case est occupée, vérifier s'il est possible de capturer
-                            else if (isset($board[$newRow][$newCol]['player']) && 
-                                     $board[$newRow][$newCol]['player'] != $player) {
-                                
-                                // Position après la capture
-                                $jumpRow = $newRow + $dir[0];
-                                $jumpCol = $newCol + $dir[1];
-                                
-                                // Vérifier que la destination après la capture est dans les limites
-                                if ($jumpRow >= 0 && $jumpRow < 8 && $jumpCol >= 0 && $jumpCol < 8) {
-                                    // Vérifier si la case est vide
-                                    if (!isset($board[$jumpRow][$jumpCol]) || $board[$jumpRow][$jumpCol] === null) {
-                                        $possibleMoves[] = [
-                                            'fromRow' => $row,
-                                            'fromCol' => $col,
-                                            'toRow' => $jumpRow,
-                                            'toCol' => $jumpCol,
-                                            'capture' => true,
-                                            'captureRow' => $newRow,
-                                            'captureCol' => $newCol
-                                        ];
+                    // Pour les pions, mouvements simples et captures à courte distance
+                    if (!$isKing) {
+                        // Vérifier les mouvements simples (1 case)
+                        foreach ($directions as $dir) {
+                            $newRow = $row + $dir[0];
+                            $newCol = $col + $dir[1];
+                            
+                            // Vérifier que la destination est dans les limites du plateau
+                            if ($newRow >= 0 && $newRow < 8 && $newCol >= 0 && $newCol < 8) {
+                                // Vérifier si la case est vide
+                                if (!isset($board[$newRow][$newCol]) || $board[$newRow][$newCol] === null) {
+                                    $possibleMoves[] = [
+                                        'fromRow' => $row,
+                                        'fromCol' => $col,
+                                        'toRow' => $newRow,
+                                        'toCol' => $newCol
+                                    ];
+                                } 
+                                // Si la case est occupée, vérifier s'il est possible de capturer
+                                else if (isset($board[$newRow][$newCol]['player']) && 
+                                        $board[$newRow][$newCol]['player'] != $player) {
+                                    
+                                    // Position après la capture
+                                    $jumpRow = $newRow + $dir[0];
+                                    $jumpCol = $newCol + $dir[1];
+                                    
+                                    // Vérifier que la destination après la capture est dans les limites
+                                    if ($jumpRow >= 0 && $jumpRow < 8 && $jumpCol >= 0 && $jumpCol < 8) {
+                                        // Vérifier si la case est vide
+                                        if (!isset($board[$jumpRow][$jumpCol]) || $board[$jumpRow][$jumpCol] === null) {
+                                            $possibleMoves[] = [
+                                                'fromRow' => $row,
+                                                'fromCol' => $col,
+                                                'toRow' => $jumpRow,
+                                                'toCol' => $jumpCol,
+                                                'capture' => true,
+                                                'captureRow' => $newRow,
+                                                'captureCol' => $newCol
+                                            ];
+                                        }
                                     }
+                                }
+                            }
+                        }
+                    }
+                    // Pour les dames, mouvements à longue distance et captures à longue distance
+                    else {
+                        foreach ($directions as $dir) {
+                            // Mouvements simples (toutes les cases vides dans la direction)
+                            $currentRow = $row + $dir[0];
+                            $currentCol = $col + $dir[1];
+                            
+                            // Parcourir la diagonale tant qu'on reste dans les limites et que les cases sont vides
+                            while ($currentRow >= 0 && $currentRow < 8 && $currentCol >= 0 && $currentCol < 8) {
+                                // Si la case est vide, c'est un mouvement possible
+                                if (!isset($board[$currentRow][$currentCol]) || $board[$currentRow][$currentCol] === null) {
+                                    $possibleMoves[] = [
+                                        'fromRow' => $row,
+                                        'fromCol' => $col,
+                                        'toRow' => $currentRow,
+                                        'toCol' => $currentCol
+                                    ];
+                                    
+                                    // Continuer à explorer cette direction
+                                    $currentRow += $dir[0];
+                                    $currentCol += $dir[1];
+                                } 
+                                // Si on rencontre une pièce
+                                else {
+                                    // Si c'est une pièce adverse, on peut potentiellement la capturer
+                                    if (isset($board[$currentRow][$currentCol]['player']) && 
+                                        $board[$currentRow][$currentCol]['player'] != $player) {
+                                        
+                                        // Vérifier si on peut atterrir après la capture
+                                        $jumpRow = $currentRow + $dir[0];
+                                        $jumpCol = $currentCol + $dir[1];
+                                        
+                                        // Continuer à vérifier les cases après la pièce adverse
+                                        while ($jumpRow >= 0 && $jumpRow < 8 && $jumpCol >= 0 && $jumpCol < 8) {
+                                            // Si la case est vide, c'est une capture possible
+                                            if (!isset($board[$jumpRow][$jumpCol]) || $board[$jumpRow][$jumpCol] === null) {
+                                                $possibleMoves[] = [
+                                                    'fromRow' => $row,
+                                                    'fromCol' => $col,
+                                                    'toRow' => $jumpRow,
+                                                    'toCol' => $jumpCol,
+                                                    'capture' => true,
+                                                    'captureRow' => $currentRow,
+                                                    'captureCol' => $currentCol
+                                                ];
+                                                
+                                                // Continuer à explorer pour des cases d'atterrissage plus lointaines
+                                                $jumpRow += $dir[0];
+                                                $jumpCol += $dir[1];
+                                            } else {
+                                                // On a rencontré une autre pièce, on ne peut pas aller plus loin
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    
+                                    // On a rencontré une pièce (quelle qu'elle soit), on ne peut pas aller plus loin dans cette direction
+                                    break;
                                 }
                             }
                         }

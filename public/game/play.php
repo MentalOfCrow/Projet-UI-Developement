@@ -245,33 +245,86 @@ $pageTitle = "Jouer - " . APP_NAME;
             $defeats = 0;
             $draws = 0;
             
-            // Récupérer les parties terminées pour l'affichage des statistiques
-            $historyForStats = $gameController->readGameHistory($user_id);
-            
-            // Ajout d'un log de débogage
-            error_log("play.php: Récupération de l'historique pour l'utilisateur {$user_id}, nombre de parties: " . ($historyForStats ? $historyForStats->rowCount() : 'null'));
-            
-            if ($historyForStats && $historyForStats->rowCount() > 0) {
-                // Compter les parties
-                $total_games = $historyForStats->rowCount();
+            // 1. Essayer d'obtenir les statistiques directement de la table stats (méthode préférée)
+            try {
+                $db = Database::getInstance()->getConnection();
+                $stmt = $db->prepare("SELECT * FROM stats WHERE user_id = ?");
+                $stmt->execute([$user_id]);
+                $user_stats = $stmt->fetch(PDO::FETCH_ASSOC);
                 
-                // Calculer les statistiques
-                while ($game = $historyForStats->fetch(PDO::FETCH_ASSOC)) {
-                    error_log("play.php: Examen de la partie ID: " . $game['id'] . ", winner_id: " . $game['winner_id'] . ", user_id: {$user_id}");
+                if ($user_stats) {
+                    $total_games = $user_stats['games_played'];
+                    $victories = $user_stats['games_won'];
+                    $defeats = $user_stats['games_lost'];
+                    $draws = $total_games - $victories - $defeats;
                     
-                    if ($game['winner_id'] == $user_id) {
-                        $victories++;
-                        error_log("play.php: Comptabilisé comme victoire");
-                    } elseif ($game['winner_id'] == null) {
-                        $draws++;
-                        error_log("play.php: Comptabilisé comme match nul");
-                    } else {
-                        $defeats++;
-                        error_log("play.php: Comptabilisé comme défaite");
-                    }
+                    error_log("play.php: Statistiques récupérées depuis la table stats - parties: {$total_games}, victoires: {$victories}, défaites: {$defeats}, nuls: {$draws}");
+                } else {
+                    // Si aucune statistique n'est trouvée, on les calcule directement avec une requête
+                    error_log("play.php: Aucune statistique trouvée dans la table stats, calcul direct via SQL");
+                    
+                    $stmt = $db->prepare("SELECT 
+                        COUNT(*) as total_games,
+                        SUM(CASE WHEN winner_id = ? THEN 1 ELSE 0 END) as victories,
+                        SUM(CASE WHEN winner_id IS NULL THEN 1 ELSE 0 END) as draws,
+                        SUM(CASE WHEN winner_id IS NOT NULL AND winner_id != ? THEN 1 ELSE 0 END) as defeats
+                        FROM games 
+                        WHERE (player1_id = ? OR player2_id = ?) 
+                        AND status = 'finished'");
+                    $stmt->execute([$user_id, $user_id, $user_id, $user_id]);
+                    $calculated_stats = $stmt->fetch(PDO::FETCH_ASSOC);
+                    
+                    $total_games = $calculated_stats['total_games'];
+                    $victories = $calculated_stats['victories'];
+                    $draws = $calculated_stats['draws'];
+                    $defeats = $calculated_stats['defeats'];
+                    
+                    error_log("play.php: Stats calculées via SQL - parties: {$total_games}, victoires: {$victories}, défaites: {$defeats}, nuls: {$draws}");
+                    
+                    // Créer ou mettre à jour les statistiques dans la table stats
+                    $stmt = $db->prepare("INSERT INTO stats (user_id, games_played, games_won, games_lost, last_game) 
+                        VALUES (?, ?, ?, ?, NOW())
+                        ON DUPLICATE KEY UPDATE
+                        games_played = ?,
+                        games_won = ?,
+                        games_lost = ?,
+                        last_game = NOW()");
+                    $stmt->execute([$user_id, $total_games, $victories, $defeats, $total_games, $victories, $defeats]);
+                    error_log("play.php: Statistiques créées/mises à jour dans la table stats");
                 }
+            } catch (Exception $e) {
+                error_log("play.php: Erreur lors de la récupération des statistiques: " . $e->getMessage());
                 
-                error_log("play.php: Totaux - parties: {$total_games}, victoires: {$victories}, défaites: {$defeats}, nuls: {$draws}");
+                // En cas d'erreur, fallback sur la méthode originale
+                // Récupérer les parties terminées pour l'affichage des statistiques
+                $historyForStats = $gameController->readGameHistory($user_id);
+                
+                // Ajout d'un log de débogage
+                error_log("play.php: Récupération de l'historique pour l'utilisateur {$user_id}, nombre de parties: " . ($historyForStats ? $historyForStats->rowCount() : 'null'));
+                
+                // Si le comptage direct a échoué, utiliser la méthode par défaut
+                if ($historyForStats && $historyForStats->rowCount() > 0) {
+                    // Compter les parties
+                    $total_games = $historyForStats->rowCount();
+                    
+                    // Calculer les statistiques
+                    while ($game = $historyForStats->fetch(PDO::FETCH_ASSOC)) {
+                        error_log("play.php: Examen de la partie ID: " . $game['id'] . ", winner_id: " . $game['winner_id'] . ", user_id: {$user_id}");
+                        
+                        if ($game['winner_id'] == $user_id) {
+                            $victories++;
+                            error_log("play.php: Comptabilisé comme victoire");
+                        } elseif ($game['winner_id'] == null) {
+                            $draws++;
+                            error_log("play.php: Comptabilisé comme match nul");
+                        } else {
+                            $defeats++;
+                            error_log("play.php: Comptabilisé comme défaite");
+                        }
+                    }
+                    
+                    error_log("play.php: Totaux - parties: {$total_games}, victoires: {$victories}, défaites: {$defeats}, nuls: {$draws}");
+                }
             }
             
             // Récupérer à nouveau l'historique pour l'affichage du tableau

@@ -45,7 +45,7 @@ try {
     // Récupérer directement les parties terminées
     $query = "SELECT g.*, 
             u1.username as player1_name, 
-            u2.username as player2_name 
+            u2.username as player2_name
             FROM games g
             LEFT JOIN users u1 ON g.player1_id = u1.id
             LEFT JOIN users u2 ON g.player2_id = u2.id
@@ -71,7 +71,13 @@ try {
         
         // Déterminer le résultat
         $result = "Match nul";
-        if ($game['winner_id'] !== null) {
+        
+        // Cas particulier: partie contre l'IA avec winner_id null, c'est toujours une défaite
+        if (($game['player2_id'] === 0 || $game['player2_id'] === '0') && $game['winner_id'] === null) {
+            $result = "Défaite";
+        } 
+        // Sinon, vérifier si un gagnant est défini
+        else if ($game['winner_id'] !== null) {
             if ($game['winner_id'] == $user_id) {
                 $result = "Victoire";
             } else {

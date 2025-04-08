@@ -215,7 +215,7 @@ class GameController {
                       u1.username as player1_name, 
                       u2.username as player2_name 
                       FROM {$this->game->table} g
-                      JOIN users u1 ON g.player1_id = u1.id
+                      LEFT JOIN users u1 ON g.player1_id = u1.id
                       LEFT JOIN users u2 ON g.player2_id = u2.id
                       WHERE (g.player1_id = :player_id OR g.player2_id = :player_id) 
                       AND g.status = 'finished'

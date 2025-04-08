@@ -242,43 +242,44 @@ function repairUserStats($userId) {
         $gamesLost = 0;
         $lastGame = null;
         
-        // Compter les parties où l'utilisateur est joueur 1
-        $stmt = $db->prepare("
-            SELECT 
-                COUNT(*) as total,
-                SUM(CASE WHEN winner_id = ? THEN 1 ELSE 0 END) as won,
-                SUM(CASE WHEN winner_id IS NOT NULL AND winner_id != ? THEN 1 ELSE 0 END) as lost,
-                MAX(updated_at) as last_game
+        // Récupérer toutes les parties terminées de cet utilisateur
+        $gamesQuery = "SELECT 
+                id, 
+                player1_id, 
+                player2_id, 
+                winner_id,
+                updated_at
             FROM games 
-            WHERE player1_id = ? AND status = 'finished'
-        ");
-        $stmt->execute([$userId, $userId, $userId]);
-        $player1Stats = $stmt->fetch(PDO::FETCH_ASSOC);
+            WHERE (player1_id = ? OR player2_id = ?) 
+            AND status = 'finished'";
         
-        // Compter les parties où l'utilisateur est joueur 2
-        $stmt = $db->prepare("
-            SELECT 
-                COUNT(*) as total,
-                SUM(CASE WHEN winner_id = ? THEN 1 ELSE 0 END) as won,
-                SUM(CASE WHEN winner_id IS NOT NULL AND winner_id != ? THEN 1 ELSE 0 END) as lost,
-                MAX(updated_at) as last_game
-            FROM games 
-            WHERE player2_id = ? AND status = 'finished'
-        ");
-        $stmt->execute([$userId, $userId, $userId]);
-        $player2Stats = $stmt->fetch(PDO::FETCH_ASSOC);
+        $gamesStmt = $db->prepare($gamesQuery);
+        $gamesStmt->execute([$userId, $userId]);
         
-        // Calculer les totaux
-        $gamesPlayed = ($player1Stats['total'] ?? 0) + ($player2Stats['total'] ?? 0);
-        $gamesWon = ($player1Stats['won'] ?? 0) + ($player2Stats['won'] ?? 0);
-        $gamesLost = ($player1Stats['lost'] ?? 0) + ($player2Stats['lost'] ?? 0);
+        $games = $gamesStmt->fetchAll(PDO::FETCH_ASSOC);
+        $gamesPlayed = count($games);
         
-        // Déterminer la dernière partie
-        if (!empty($player1Stats['last_game']) && !empty($player2Stats['last_game'])) {
-            $lastGame = (strtotime($player1Stats['last_game']) > strtotime($player2Stats['last_game'])) 
-                         ? $player1Stats['last_game'] : $player2Stats['last_game'];
-        } else {
-            $lastGame = !empty($player1Stats['last_game']) ? $player1Stats['last_game'] : $player2Stats['last_game'];
+        foreach ($games as $game) {
+            // Mise à jour de la date de dernière partie
+            if ($lastGame === null || strtotime($game['updated_at']) > strtotime($lastGame)) {
+                $lastGame = $game['updated_at'];
+            }
+            
+            // Vérifier si le joueur a gagné
+            if ($game['winner_id'] == $userId) {
+                $gamesWon++;
+            } 
+            // Vérifier si le joueur a perdu
+            else if ($game['winner_id'] !== null && $game['winner_id'] != $userId) {
+                $gamesLost++;
+            }
+            // Cas spécial: partie contre l'IA avec winner_id null = défaite
+            else if ($game['winner_id'] === null && 
+                    (($game['player1_id'] == $userId && ($game['player2_id'] == 0 || $game['player2_id'] === '0')) || 
+                     ($game['player2_id'] == $userId && ($game['player1_id'] == 0 || $game['player1_id'] === '0')))) {
+                $gamesLost++;
+            }
+            // Sinon c'est un match nul (winner_id === null et pas une partie contre l'IA)
         }
         
         // Mettre à jour ou insérer les statistiques

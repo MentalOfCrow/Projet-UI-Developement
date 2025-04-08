@@ -72,7 +72,8 @@ try {
         // Déterminer le résultat
         $result = "Match nul";
         
-        // Cas particulier: partie contre l'IA avec winner_id null, c'est toujours une défaite
+        // Un match nul est défini uniquement lorsque le gagnant est null ET qu'aucun des deux joueurs n'a perdu
+        // Cas particulier: partie contre l'IA avec winner_id null, c'est toujours une défaite pour le joueur
         if (($game['player2_id'] === 0 || $game['player2_id'] === '0') && $game['winner_id'] === null) {
             $result = "Défaite";
         } 
@@ -83,6 +84,9 @@ try {
             } else {
                 $result = "Défaite";
             }
+        } else {
+            // Si winner_id est null et ce n'est pas contre un bot, c'est un match nul légitime
+            $result = "Match nul";
         }
         
         // Formater les données

@@ -1123,10 +1123,9 @@ class GameController {
             error_log("updatePlayerStats: Mise à jour des statistiques pour le joueur ID: {$user_id}, Victoire: " . ($is_winner ? 'Oui' : 'Non'));
             
             // Vérifier si l'utilisateur existe (pour éviter les erreurs de clé étrangère)
-            $checkUserQuery = "SELECT id FROM users WHERE id = :user_id";
+            $checkUserQuery = "SELECT id FROM users WHERE id = ?";
             $checkUserStmt = $this->db->prepare($checkUserQuery);
-            $checkUserStmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-            $checkUserStmt->execute();
+            $checkUserStmt->execute([$user_id]);
             
             if ($checkUserStmt->rowCount() == 0) {
                 error_log("updatePlayerStats: Utilisateur ID {$user_id} non trouvé dans la base de données");
@@ -1135,29 +1134,24 @@ class GameController {
             
             // Mettre à jour les statistiques dans la table stats
             // Utiliser INSERT ... ON DUPLICATE KEY UPDATE pour créer ou mettre à jour
-            $query = "INSERT INTO stats (user_id, games_played, games_won, games_lost, last_game) 
-                      VALUES (:user_id, 1, :wins, :losses, NOW()) 
-                      ON DUPLICATE KEY UPDATE 
-                      games_played = games_played + 1, 
-                      games_won = games_won + :wins, 
-                      games_lost = games_lost + :losses,
-                      last_game = NOW()";
-            
-            $stmt = $this->db->prepare($query);
             $wins = $is_winner ? 1 : 0;
             $losses = $is_winner ? 0 : 1;
             
-            $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-            $stmt->bindParam(':wins', $wins, PDO::PARAM_INT);
-            $stmt->bindParam(':losses', $losses, PDO::PARAM_INT);
+            $query = "INSERT INTO stats (user_id, games_played, games_won, games_lost, last_game) 
+                      VALUES (?, 1, ?, ?, NOW()) 
+                      ON DUPLICATE KEY UPDATE 
+                      games_played = games_played + 1, 
+                      games_won = games_won + ?, 
+                      games_lost = games_lost + ?,
+                      last_game = NOW()";
             
-            $result = $stmt->execute();
+            $stmt = $this->db->prepare($query);
+            $stmt->execute([$user_id, $wins, $losses, $wins, $losses]);
             
             // Vérifier que les statistiques ont bien été mises à jour
-            $checkStatsQuery = "SELECT * FROM stats WHERE user_id = :user_id";
+            $checkStatsQuery = "SELECT * FROM stats WHERE user_id = ?";
             $checkStatsStmt = $this->db->prepare($checkStatsQuery);
-            $checkStatsStmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-            $checkStatsStmt->execute();
+            $checkStatsStmt->execute([$user_id]);
             
             if ($checkStatsStmt->rowCount() > 0) {
                 $stats = $checkStatsStmt->fetch(PDO::FETCH_ASSOC);

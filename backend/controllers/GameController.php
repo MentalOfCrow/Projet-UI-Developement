@@ -524,32 +524,36 @@ class GameController {
         
         // Vérifier si le mouvement est en diagonale (la distance en lignes et colonnes doit être égale)
         if (abs($row_distance) != $col_distance) {
-            return [
-                'valid' => false,
+                return [
+                    'valid' => false, 
                 'message' => 'Les pièces doivent se déplacer en diagonale.'
             ];
         }
         
-        // Logique pour les pions (non-rois)
+        // Vérifier si le joueur a une capture obligatoire disponible
+        $hasCapture = $this->hasForcedCapture($board, $player);
+        
+        // Pour les pions (non-rois)
         if (!$isKing) {
             // Si c'est un déplacement simple (distance de 1)
             if (abs($row_distance) == 1) {
                 // Vérifier si le joueur est obligé de capturer ailleurs
-                if ($this->hasForcedCapture($board, $player)) {
-                    return [
-                        'valid' => false,
+                if ($hasCapture) {
+                return [
+                    'valid' => false, 
                         'message' => 'Vous avez une capture obligatoire à effectuer.'
-                    ];
-                }
-                
+                ];
+            }
+            
                 // Pour les pions, vérifier qu'ils se déplacent uniquement dans leur direction
+                // SAUF pour les captures qui peuvent être en arrière
                 if (($player == 1 && $row_distance < 0) || ($player == 2 && $row_distance > 0)) {
-                    return [
+            return [
                         'valid' => false,
-                        'message' => 'Les pions ne peuvent se déplacer que vers l\'avant.'
-                    ];
-                }
-                
+                        'message' => 'Les pions ne peuvent se déplacer que vers l\'avant pour les mouvements simples.'
+            ];
+        }
+        
                 // Mouvement simple valide pour un pion
                 return [
                     'valid' => true,
@@ -560,24 +564,36 @@ class GameController {
             // Si c'est un mouvement de capture (distance de 2)
             else if (abs($row_distance) == 2) {
                 // Calculer la position de la pièce à capturer
-                $capture_row = $from_row + ($row_distance / 2);
-                $capture_col = $from_col + (($to_col - $from_col) / 2);
-                
+            $capture_row = $from_row + ($row_distance / 2);
+            $capture_col = $from_col + (($to_col - $from_col) / 2);
+            
                 // Vérifier si la case intermédiaire contient une pièce adverse
                 if (isset($board[$capture_row][$capture_col]) && 
                     is_array($board[$capture_row][$capture_col]) &&
                     isset($board[$capture_row][$capture_col]['player']) && 
                     $board[$capture_row][$capture_col]['player'] != $player) {
                     
-                    // Capture valide pour un pion
-                    return [
-                        'valid' => true,
+                    // Si on a une capture disponible mais pas celle qu'on essaie de faire,
+                    // vérifier si le mouvement actuel est une capture valide
+                    if ($hasCapture) {
+                        // Vérifier si cette pièce spécifique peut capturer
+                        if (!$this->canCaptureFrom($board, $from_row, $from_col, $player)) {
+                return [
+                    'valid' => false, 
+                                'message' => 'Vous devez capturer avec une pièce qui peut le faire.'
+                ];
+                        }
+            }
+            
+                    // Capture valide pour un pion (peut être en avant ou en arrière)
+            return [
+                'valid' => true,
                         'message' => 'Capture valide.',
-                        'capture' => true,
-                        'captured' => [
-                            'row' => $capture_row,
-                            'col' => $capture_col
-                        ]
+                'capture' => true,
+                'captured' => [
+                    'row' => $capture_row,
+                    'col' => $capture_col
+                ]
                     ];
                 } else {
                     return [
@@ -594,11 +610,11 @@ class GameController {
         }
         // Logique pour les dames
         else {
-            // Vérifier si le joueur est obligé de capturer ailleurs (pour un déplacement simple)
-            if (abs($row_distance) == 1 && $this->hasForcedCapture($board, $player)) {
+            // Vérifier si le joueur est obligé de capturer et si cette dame peut capturer
+            if ($hasCapture && !$this->canCaptureFrom($board, $from_row, $from_col, $player) && abs($row_distance) == 1) {
                 return [
                     'valid' => false,
-                    'message' => 'Vous avez une capture obligatoire à effectuer.'
+                    'message' => 'Vous avez une capture obligatoire à effectuer avec une autre pièce.'
                 ];
             }
             
@@ -626,7 +642,7 @@ class GameController {
                     // Si c'est une pièce du même joueur, le mouvement est invalide
                     if ($board[$current_row][$current_col]['player'] == $player) {
                         return [
-                            'valid' => false,
+                            'valid' => false, 
                             'message' => 'Une dame ne peut pas sauter par-dessus ses propres pièces.'
                         ];
                     }
@@ -646,6 +662,14 @@ class GameController {
             
             // Si on a trouvé une capture et qu'on arrive à destination, c'est une capture valide
             if ($capture) {
+                // Vérifier si cette dame devait capturer ailleurs
+                if ($hasCapture && !$this->canCaptureFrom($board, $from_row, $from_col, $player)) {
+                return [
+                    'valid' => false, 
+                        'message' => 'Vous devez capturer avec une pièce qui peut le faire.'
+                ];
+            }
+            
                 return [
                     'valid' => true,
                     'message' => 'Capture valide pour une dame.',
@@ -655,12 +679,20 @@ class GameController {
             }
             
             // Si aucune pièce n'a été rencontrée, c'est un déplacement simple valide
-            return [
-                'valid' => true,
+            // mais uniquement s'il n'y a pas de capture obligatoire ailleurs
+            if ($hasCapture) {
+                    return [
+                        'valid' => false, 
+                    'message' => 'Vous avez une capture obligatoire à effectuer.'
+                    ];
+                }
+                
+                return [
+                    'valid' => true,
                 'message' => 'Mouvement valide pour une dame.',
-                'capture' => false
-            ];
-        }
+                    'capture' => false
+                ];
+            }
     }
     
     /**
@@ -702,7 +734,7 @@ class GameController {
         if (!isset($board[$row][$col]) || !is_array($board[$row][$col]) || $board[$row][$col]['player'] != $player) {
             return false;
         }
-
+        
         $isKing = isset($board[$row][$col]['type']) && $board[$row][$col]['type'] === 'king';
         $directions = [
             ['row' => -1, 'col' => -1], // Haut-Gauche
@@ -711,20 +743,13 @@ class GameController {
             ['row' => 1, 'col' => 1]    // Bas-Droite
         ];
 
-        // Pour les pions normaux, on ne vérifie que les directions avant pour le joueur 1 et arrière pour joueur 2
-        if (!$isKing) {
-            if ($player == 1) {
-                // Joueur 1 se déplace vers le bas du plateau
-                $directions = array_slice($directions, 2, 2); // Uniquement Bas-Gauche et Bas-Droite
-            } else {
-                // Joueur 2 se déplace vers le haut du plateau
-                $directions = array_slice($directions, 0, 2); // Uniquement Haut-Gauche et Haut-Droite
-            }
-        }
+        // Pour les pions normaux, on vérifie maintenant toutes les directions
+        // Les pions peuvent capturer dans toutes les directions, même arrière
+        // C'est seulement pour les déplacements simples qu'ils sont limités à l'avant
 
         foreach ($directions as $dir) {
             // Pour les pions, on vérifie seulement une case plus loin
-            if (!$isKing) {
+        if (!$isKing) {
                 $captureRow = $row + $dir['row'];
                 $captureCol = $col + $dir['col'];
                 $landingRow = $row + 2 * $dir['row'];
@@ -791,7 +816,7 @@ class GameController {
                 }
             }
         }
-
+        
         return false;
     }
     
@@ -815,12 +840,26 @@ class GameController {
         $board[$from_row][$from_col] = null;
         
         // Si c'est une capture, supprimer la pièce capturée
+        $captured = false;
         if (isset($validMove['capture']) && $validMove['capture'] && isset($validMove['captured'])) {
             $capture_row = $validMove['captured']['row'];
             $capture_col = $validMove['captured']['col'];
             
-            error_log("Capture: Suppression de la pièce à la position [$capture_row,$capture_col]");
+            error_log("Capture: Joueur $player supprime la pièce à la position [$capture_row,$capture_col]");
+            
+            // Vérifier que la pièce capturée existe et est adverse
+            if (isset($board[$capture_row][$capture_col]) && 
+                is_array($board[$capture_row][$capture_col]) && 
+                $board[$capture_row][$capture_col]['player'] != $player) {
+                
+                // Supprimer la pièce
             $board[$capture_row][$capture_col] = null;
+                $captured = true;
+                
+                error_log("Capture réussie: Pièce supprimée à [$capture_row,$capture_col]");
+            } else {
+                error_log("Erreur de capture: Aucune pièce adverse trouvée à [$capture_row,$capture_col]");
+            }
         }
         
         return $board;
@@ -1025,7 +1064,7 @@ class GameController {
             $this->db->beginTransaction();
             
             // Récupérer les informations de la partie
-            $query = "SELECT player1_id, player2_id FROM games WHERE id = :game_id";
+            $query = "SELECT player1_id, player2_id, board_state FROM games WHERE id = :game_id";
             $stmt = $this->db->prepare($query);
             $stmt->bindParam(':game_id', $game_id);
             $stmt->execute();
@@ -1040,6 +1079,32 @@ class GameController {
             
             error_log("endGame: Traitement de fin de partie ID: {$game_id}, winner_id: {$winner_id}, loser_id: " . ($loser_id ?? 'null'));
             error_log("endGame: Infos partie - player1_id: {$gameInfo['player1_id']}, player2_id: {$gameInfo['player2_id']}");
+            
+            // Vérifier si c'est un match nul (les deux joueurs sont bloqués)
+            $isDrawGame = false;
+            
+            if ($winner_id === null && $loser_id === null) {
+                // Analyser l'état du plateau pour confirmer que c'est bien un match nul
+                $board = json_decode($gameInfo['board_state'], true);
+                $player1Blocked = $this->checkGameOver($board, 1);
+                $player2Blocked = $this->checkGameOver($board, 2);
+                
+                // C'est un match nul seulement si les deux joueurs sont bloqués
+                $isDrawGame = $player1Blocked && $player2Blocked;
+                
+                if (!$isDrawGame) {
+                    // Si ce n'est pas un match nul, déterminer le gagnant
+                    if ($player1Blocked) {
+                        // Le joueur 1 est bloqué, le joueur 2 gagne
+                        $winner_id = $gameInfo['player2_id'];
+                    } else if ($player2Blocked) {
+                        // Le joueur 2 est bloqué, le joueur 1 gagne
+                        $winner_id = $gameInfo['player1_id'];
+                    }
+                    
+                    error_log("endGame: Match nul indiqué mais situation non évaluée comme match nul. Gagnant déterminé: " . $winner_id);
+                }
+            }
             
             // Gérer spécifiquement le cas de l'abandon contre l'IA
             if ($gameInfo['player2_id'] == 0 && $winner_id == 0) {
@@ -1066,7 +1131,7 @@ class GameController {
                 return false;
             }
             
-            error_log("endGame: Statut de la partie mis à jour avec succès, statut: 'finished', winner_id: " . ($winner_id ?? 'null'));
+            error_log("endGame: Statut de la partie mis à jour avec succès, statut: 'finished', winner_id: " . ($winner_id ?? 'null') . ", isDrawGame: " . ($isDrawGame ? 'true' : 'false'));
             
             // Mettre à jour les statistiques manuellement (en plus du trigger)
             $player1_id = $gameInfo['player1_id'];
@@ -1085,16 +1150,29 @@ class GameController {
                 return true;
             }
             
-            // Mise à jour des statistiques du joueur 1
-            $player1Won = ($winner_id == $player1_id);
-            $this->updatePlayerStats($player1_id, $player1Won);
-            error_log("endGame: Statistiques du joueur 1 (ID: {$player1_id}) mises à jour, victoire: " . ($player1Won ? 'oui' : 'non'));
-            
-            // Mise à jour des statistiques du joueur 2 (seulement s'il n'est pas un bot, player_id != 0)
-            if ($player2_id != 0) {
-                $player2Won = ($winner_id == $player2_id);
-                $this->updatePlayerStats($player2_id, $player2Won);
-                error_log("endGame: Statistiques du joueur 2 (ID: {$player2_id}) mises à jour, victoire: " . ($player2Won ? 'oui' : 'non'));
+            // Match nul - pas de mise à jour des stats victoire/défaite, seulement partie jouée
+            if ($isDrawGame) {
+                error_log("endGame: Match nul confirmé. Mise à jour statistiques sans victoire/défaite.");
+                
+                // Mise à jour des statistiques du joueur 1 pour un match nul
+                $this->updatePlayerStatsForDraw($player1_id);
+                
+                // Mise à jour des statistiques du joueur 2 pour un match nul (seulement s'il n'est pas un bot)
+                if ($player2_id != 0) {
+                    $this->updatePlayerStatsForDraw($player2_id);
+                }
+            } else {
+                // Mise à jour des statistiques du joueur 1
+                $player1Won = ($winner_id == $player1_id);
+                $this->updatePlayerStats($player1_id, $player1Won);
+                error_log("endGame: Statistiques du joueur 1 (ID: {$player1_id}) mises à jour, victoire: " . ($player1Won ? 'oui' : 'non'));
+                
+                // Mise à jour des statistiques du joueur 2 (seulement s'il n'est pas un bot, player_id != 0)
+                if ($player2_id != 0) {
+                    $player2Won = ($winner_id == $player2_id);
+                    $this->updatePlayerStats($player2_id, $player2Won);
+                    error_log("endGame: Statistiques du joueur 2 (ID: {$player2_id}) mises à jour, victoire: " . ($player2Won ? 'oui' : 'non'));
+                }
             }
             
             // Valider la transaction
@@ -1109,6 +1187,41 @@ class GameController {
             }
             
             error_log("Erreur dans endGame: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Met à jour les statistiques d'un joueur pour un match nul
+     * @param int $user_id ID du joueur
+     */
+    private function updatePlayerStatsForDraw($user_id) {
+        try {
+            error_log("updatePlayerStatsForDraw: Mise à jour des statistiques pour le joueur ID: {$user_id}");
+            
+            // Vérifier si l'utilisateur existe
+            $checkUserQuery = "SELECT id FROM users WHERE id = ?";
+            $checkUserStmt = $this->db->prepare($checkUserQuery);
+            $checkUserStmt->execute([$user_id]);
+            
+            if ($checkUserStmt->rowCount() == 0) {
+                error_log("updatePlayerStatsForDraw: Utilisateur ID {$user_id} non trouvé dans la base de données");
+                return false;
+            }
+            
+            // Mettre à jour les statistiques dans la table stats - uniquement incrémenter games_played
+            $query = "INSERT INTO stats (user_id, games_played, games_won, games_lost, last_game) 
+                      VALUES (?, 1, 0, 0, NOW()) 
+                      ON DUPLICATE KEY UPDATE 
+                      games_played = games_played + 1,
+                      last_game = NOW()";
+            
+            $stmt = $this->db->prepare($query);
+            $stmt->execute([$user_id]);
+            
+            return true;
+        } catch (PDOException $e) {
+            error_log("Erreur dans updatePlayerStatsForDraw: " . $e->getMessage());
             return false;
         }
     }
@@ -1129,8 +1242,8 @@ class GameController {
             
             if ($checkUserStmt->rowCount() == 0) {
                 error_log("updatePlayerStats: Utilisateur ID {$user_id} non trouvé dans la base de données");
-                return false;
-            }
+            return false;
+        }
             
             // Mettre à jour les statistiques dans la table stats
             // Utiliser INSERT ... ON DUPLICATE KEY UPDATE pour créer ou mettre à jour
@@ -1232,307 +1345,264 @@ class GameController {
     }
     
     /**
-     * Fait jouer le bot pour une partie donnée
-     * @param int $game_id ID de la partie
-     * @return bool Succès de l'opération
+     * Vérifie si une pièce peut effectuer des captures multiples
+     * 
+     * @param array $board État actuel du plateau
+     * @param int $playerNumber Numéro du joueur (1 ou 2)
+     * @param int $row Ligne de la pièce
+     * @param int $col Colonne de la pièce
+     * @return array Liste des captures possibles
      */
-    private function makeBotMove($game_id) {
-        try {
-            error_log("makeBotMove: Début du traitement pour la partie ID: " . $game_id);
-            
-            // Récupérer l'état actuel de la partie directement depuis la base de données
-            $query = "SELECT * FROM games WHERE id = :game_id";
-            $stmt = $this->db->prepare($query);
-            $stmt->bindParam(':game_id', $game_id, PDO::PARAM_INT);
-            $stmt->execute();
-            
-            $game = $stmt->fetch(PDO::FETCH_ASSOC);
-            if (!$game) {
-                error_log("makeBotMove: Partie introuvable pour l'ID: " . $game_id);
-                return false;
-            }
-            
-            // Vérifier si c'est le tour du bot
-            if ($game['current_player'] != 2) {
-                error_log("makeBotMove: Ce n'est pas le tour du bot pour la partie ID: " . $game_id);
-                return false;
-            }
-            
-            // Décoder l'état du plateau
-            $board = json_decode($game['board_state'], true);
-            if (!is_array($board)) {
-                error_log("makeBotMove: État du plateau invalide pour la partie ID: " . $game_id);
-                return false;
-            }
-            
-            // Trouver tous les mouvements possibles pour le bot (joueur 2)
-            $possibleMoves = $this->findAllPossibleMoves($board, 2);
-            
-            // Si aucun mouvement n'est possible, le bot a perdu
-            if (empty($possibleMoves)) {
-                error_log("makeBotMove: Aucun mouvement possible pour le bot dans la partie ID: " . $game_id);
-                
-                // Mettre à jour la partie comme terminée, avec le joueur 1 comme gagnant
-                $this->endGame($game_id, $game['player1_id']);
-                return true;
-            }
-            
-            // Vérifier s'il y a des captures obligatoires
-            $capturesMoves = [];
-            foreach ($possibleMoves as $move) {
-                $validMove = $this->isValidMove($board, $move['fromRow'], $move['fromCol'], $move['toRow'], $move['toCol'], 2);
-                if (isset($validMove['capture']) && $validMove['capture']) {
-                    $capturesMoves[] = $move;
-                }
-            }
-            
-            // Prioriser les captures si disponibles
-            if (!empty($capturesMoves)) {
-                $move = $capturesMoves[array_rand($capturesMoves)];
-            } else {
-                // Sinon choisir un mouvement aléatoire parmi les mouvements possibles
-                $move = $possibleMoves[array_rand($possibleMoves)];
-            }
-            
-            error_log("makeBotMove: Mouvement choisi - De: " . $move['fromRow'] . "," . $move['fromCol'] . " À: " . $move['toRow'] . "," . $move['toCol']);
-            
-            // Appliquer le mouvement
-            $validMove = $this->isValidMove($board, $move['fromRow'], $move['fromCol'], $move['toRow'], $move['toCol'], 2);
-            
-            if ($validMove['valid']) {
-                // Préparer la variable pour la capture (si applicable)
-                $captured = isset($validMove['capture']) && $validMove['capture'];
-                
-                // Appliquer le mouvement sur le plateau
-                $board = $this->moveChecker($board, $move['fromRow'], $move['fromCol'], $move['toRow'], $move['toCol'], 2, $validMove);
-                
-                // Vérifier si le jeu est terminé après ce mouvement
-                $gameOver = $this->checkGameOver($board, 1); // Vérifier si le joueur 1 peut encore jouer
-                
-                // Déterminer le prochain joueur (si le bot peut encore capturer, c'est encore son tour)
-                $nextPlayer = 1; // Par défaut, passer au joueur humain
-                $canCaptureAgain = false;
-                
-                if ($captured && $this->canCaptureFrom($board, $move['toRow'], $move['toCol'], 2)) {
-                    // Le bot peut encore capturer, donc il continue son tour
-                    error_log("makeBotMove: Le bot peut encore capturer depuis sa nouvelle position");
-                    $nextPlayer = 2;
-                    $canCaptureAgain = true;
-                }
-                
-                // Enregistrer le mouvement dans l'historique
-                $this->recordMove($game_id, 0, $move['fromRow'], $move['fromCol'], $move['toRow'], $move['toCol'], $captured);
-                
-                // Mettre à jour l'état de la partie dans la base de données
-                $query = "UPDATE games SET 
-                         board_state = :board_state, 
-                         current_player = :next_player, 
-                         status = :status, 
-                         winner_id = :winner_id,
-                         updated_at = NOW() 
-                         WHERE id = :game_id";
-                
-                $stmt = $this->db->prepare($query);
-                
-                // Encoder le plateau en JSON
-                $boardJson = json_encode($board);
-                $stmt->bindParam(':board_state', $boardJson);
-                $stmt->bindParam(':next_player', $nextPlayer);
-                
-                // Si le jeu est terminé, mettre à jour le statut et le gagnant
-                $status = $gameOver ? 'finished' : 'in_progress';
-                $stmt->bindParam(':status', $status);
-                
-                $winner_id = $gameOver ? $game['player2_id'] : null; // Le bot gagne si le joueur 1 ne peut plus jouer
-                $stmt->bindParam(':winner_id', $winner_id);
-                
-                $stmt->bindParam(':game_id', $game_id);
-                
-                $result = $stmt->execute();
-                
-                if ($result) {
-                    error_log("makeBotMove: Mouvement du bot réussi - ID: " . $game_id);
-                    
-                    // Si le bot peut encore capturer et que c'est toujours son tour, effectuer un autre mouvement
-                    if ($canCaptureAgain && !$gameOver) {
-                        error_log("makeBotMove: Le bot effectue un mouvement supplémentaire");
-                        return $this->makeBotMove($game_id);
-                    }
-                    
-                    return true;
-                }
-            }
-            
-            error_log("makeBotMove: Échec du mouvement du bot - ID: " . $game_id);
-            return false;
-            
-        } catch (Exception $e) {
-            error_log("Erreur dans makeBotMove: " . $e->getMessage());
-            return false;
-        }
-    }
-    
-    /**
-     * Trouve tous les mouvements possibles pour un joueur
-     * @param array $board État du plateau
-     * @param int $player Joueur (1 ou 2)
-     * @return array Liste des mouvements possibles
-     */
-    private function findAllPossibleMoves($board, $player) {
-        // Vérifier que le tableau est bien formé
-        if (!is_array($board)) {
-            error_log("findAllPossibleMoves: Le plateau n'est pas un tableau valide");
-            return [];
+    private function checkMultipleCaptures($board, $playerNumber, $row, $col) {
+        $possibleCaptures = [];
+        $piece = $board[$row][$col];
+        
+        if ($piece === null || $piece['player'] !== $playerNumber) {
+            return $possibleCaptures;
         }
         
-        $possibleMoves = [];
-        
-        // Parcourir le plateau
-        for ($row = 0; $row < 8; $row++) {
-            if (!isset($board[$row]) || !is_array($board[$row])) {
-                continue;
+        $directions = [];
+        // Pour les pions, les directions dépendent du joueur
+        if ($piece['type'] === 'pawn') {
+            // Les pions peuvent capturer dans toutes les directions (y compris en arrière)
+            $directions = [
+                [-2, -2], [-2, 2], [2, -2], [2, 2]
+            ];
+        } 
+        // Pour les dames, toutes les directions diagonales
+        else if ($piece['type'] === 'king') {
+            $directions = [
+                [-2, -2], [-2, 2], [2, -2], [2, 2]
+            ];
+            // Les dames peuvent capturer à plus grande distance
+            for ($i = 3; $i <= 7; $i++) {
+                $directions[] = [-$i, -$i];
+                $directions[] = [-$i, $i];
+                $directions[] = [$i, -$i];
+                $directions[] = [$i, $i];
             }
+        }
+        
+        foreach ($directions as $dir) {
+            $newRow = $row + $dir[0];
+            $newCol = $col + $dir[1];
             
-            for ($col = 0; $col < 8; $col++) {
-                if (!isset($board[$row][$col])) {
-                    continue;
-                }
-                
-                // Vérifier si la case contient une pièce du joueur
-                if (is_array($board[$row][$col]) && 
-                    isset($board[$row][$col]['player']) && 
-                    $board[$row][$col]['player'] == $player) {
-                    
-                    // Vérifier si la pièce a un type
-                    $pieceType = isset($board[$row][$col]['type']) ? $board[$row][$col]['type'] : 'pawn';
-                    $isKing = ($pieceType === 'king');
-                    
-                    // Directions pour les mouvements
-                    $directions = [];
-                    
-                    if ($pieceType == 'pawn') {
-                        // Directions pour les pions (dépendent du joueur)
-                        if ($player == 1) {
-                            $directions = [[1, -1], [1, 1]]; // Vers le bas pour joueur 1 (pions noirs)
-                        } else {
-                            $directions = [[-1, -1], [-1, 1]]; // Vers le haut pour joueur 2 (pions blancs)
-                        }
-                    } else {
-                        // Directions pour les dames (toutes les directions)
-                        $directions = [[1, -1], [1, 1], [-1, -1], [-1, 1]];
-                    }
-                    
-                    // Pour les pions, mouvements simples et captures à courte distance
-                    if (!$isKing) {
-                        // Vérifier les mouvements simples (1 case)
-                        foreach ($directions as $dir) {
-                            $newRow = $row + $dir[0];
-                            $newCol = $col + $dir[1];
-                            
-                            // Vérifier que la destination est dans les limites du plateau
-                            if ($newRow >= 0 && $newRow < 8 && $newCol >= 0 && $newCol < 8) {
-                                // Vérifier si la case est vide
-                                if (!isset($board[$newRow][$newCol]) || $board[$newRow][$newCol] === null) {
-                                    $possibleMoves[] = [
-                                        'fromRow' => $row,
-                                        'fromCol' => $col,
-                                        'toRow' => $newRow,
-                                        'toCol' => $newCol
-                                    ];
-                                } 
-                                // Si la case est occupée, vérifier s'il est possible de capturer
-                                else if (isset($board[$newRow][$newCol]['player']) && 
-                                        $board[$newRow][$newCol]['player'] != $player) {
-                                    
-                                    // Position après la capture
-                                    $jumpRow = $newRow + $dir[0];
-                                    $jumpCol = $newCol + $dir[1];
-                                    
-                                    // Vérifier que la destination après la capture est dans les limites
-                                    if ($jumpRow >= 0 && $jumpRow < 8 && $jumpCol >= 0 && $jumpCol < 8) {
-                                        // Vérifier si la case est vide
-                                        if (!isset($board[$jumpRow][$jumpCol]) || $board[$jumpRow][$jumpCol] === null) {
-                                            $possibleMoves[] = [
-                                                'fromRow' => $row,
-                                                'fromCol' => $col,
-                                                'toRow' => $jumpRow,
-                                                'toCol' => $jumpCol,
-                                                'capture' => true,
-                                                'captureRow' => $newRow,
-                                                'captureCol' => $newCol
-                                            ];
-                                        }
-                                    }
-                                }
-                            }
+            // Vérifier si les coordonnées sont valides
+            if ($newRow >= 0 && $newRow < 8 && $newCol >= 0 && $newCol < 8) {
+                // Vérifier si la case est vide
+                if ($board[$newRow][$newCol] === null) {
+                    // Pour un pion, vérifier s'il y a une pièce à capturer sur le chemin
+                    if ($piece['type'] === 'pawn') {
+                        $midRow = $row + ($dir[0] / 2);
+                        $midCol = $col + ($dir[1] / 2);
+                        
+                        if ($board[$midRow][$midCol] !== null && 
+                            $board[$midRow][$midCol]['player'] !== $playerNumber) {
+                            $possibleCaptures[] = [
+                                'fromRow' => $row,
+                                'fromCol' => $col,
+                                'toRow' => $newRow,
+                                'toCol' => $newCol,
+                                'captureRow' => $midRow,
+                                'captureCol' => $midCol
+                            ];
                         }
                     }
-                    // Pour les dames, mouvements à longue distance et captures à longue distance
-                    else {
-                        foreach ($directions as $dir) {
-                            // Mouvements simples (toutes les cases vides dans la direction)
-                            $currentRow = $row + $dir[0];
-                            $currentCol = $col + $dir[1];
+                    // Pour une dame, vérifier s'il y a une seule pièce à capturer sur le chemin
+                    else if ($piece['type'] === 'king') {
+                        $rowStep = $dir[0] / abs($dir[0]);
+                        $colStep = $dir[1] / abs($dir[1]);
+                        $distance = abs($dir[0]);
+                        $foundOpponent = false;
+                        $captureRow = -1;
+                        $captureCol = -1;
+                        
+                        for ($i = 1; $i < $distance; $i++) {
+                            $checkRow = $row + ($i * $rowStep);
+                            $checkCol = $col + ($i * $colStep);
                             
-                            // Parcourir la diagonale tant qu'on reste dans les limites et que les cases sont vides
-                            while ($currentRow >= 0 && $currentRow < 8 && $currentCol >= 0 && $currentCol < 8) {
-                                // Si la case est vide, c'est un mouvement possible
-                                if (!isset($board[$currentRow][$currentCol]) || $board[$currentRow][$currentCol] === null) {
-                                    $possibleMoves[] = [
-                                        'fromRow' => $row,
-                                        'fromCol' => $col,
-                                        'toRow' => $currentRow,
-                                        'toCol' => $currentCol
-                                    ];
-                                    
-                                    // Continuer à explorer cette direction
-                                    $currentRow += $dir[0];
-                                    $currentCol += $dir[1];
-                                } 
-                                // Si on rencontre une pièce
-                                else {
-                                    // Si c'est une pièce adverse, on peut potentiellement la capturer
-                                    if (isset($board[$currentRow][$currentCol]['player']) && 
-                                        $board[$currentRow][$currentCol]['player'] != $player) {
-                                        
-                                        // Vérifier si on peut atterrir après la capture
-                                        $jumpRow = $currentRow + $dir[0];
-                                        $jumpCol = $currentCol + $dir[1];
-                                        
-                                        // Continuer à vérifier les cases après la pièce adverse
-                                        while ($jumpRow >= 0 && $jumpRow < 8 && $jumpCol >= 0 && $jumpCol < 8) {
-                                            // Si la case est vide, c'est une capture possible
-                                            if (!isset($board[$jumpRow][$jumpCol]) || $board[$jumpRow][$jumpCol] === null) {
-                                                $possibleMoves[] = [
-                                                    'fromRow' => $row,
-                                                    'fromCol' => $col,
-                                                    'toRow' => $jumpRow,
-                                                    'toCol' => $jumpCol,
-                                                    'capture' => true,
-                                                    'captureRow' => $currentRow,
-                                                    'captureCol' => $currentCol
-                                                ];
-                                                
-                                                // Continuer à explorer pour des cases d'atterrissage plus lointaines
-                                                $jumpRow += $dir[0];
-                                                $jumpCol += $dir[1];
-                                            } else {
-                                                // On a rencontré une autre pièce, on ne peut pas aller plus loin
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    
-                                    // On a rencontré une pièce (quelle qu'elle soit), on ne peut pas aller plus loin dans cette direction
+                            if ($board[$checkRow][$checkCol] !== null) {
+                                if ($foundOpponent) {
+                                    // Deux pièces sur le chemin, capture impossible
+                                    $foundOpponent = false;
                                     break;
                                 }
+                                
+                                if ($board[$checkRow][$checkCol]['player'] === $playerNumber) {
+                                    // Une de nos pièces est sur le chemin, capture impossible
+                                    break;
+                                }
+                                
+                                // Une pièce adverse est sur le chemin, potentielle capture
+                                $foundOpponent = true;
+                                $captureRow = $checkRow;
+                                $captureCol = $checkCol;
                             }
+                        }
+                        
+                        if ($foundOpponent) {
+                            $possibleCaptures[] = [
+                                'fromRow' => $row,
+                                'fromCol' => $col,
+                                'toRow' => $newRow,
+                                'toCol' => $newCol,
+                                'captureRow' => $captureRow,
+                                'captureCol' => $captureCol
+                            ];
                         }
                     }
                 }
             }
         }
         
-        return $possibleMoves;
+        return $possibleCaptures;
+    }
+
+    /**
+     * Fait jouer le bot
+     * 
+     * @param int $gameId Identifiant de la partie
+     * @return array Réponse de l'API
+     */
+    public function makeBotMove($gameId) {
+        try {
+            // Récupérer les informations de la partie
+            $result = $this->getGame($gameId);
+            if (!$result['success']) {
+                return [
+                    'success' => false,
+                    'message' => 'Partie introuvable.'
+                ];
+            }
+            
+            $game = $result['game'];
+            $botNumber = $game['player2_id'] == 0 ? 2 : 1;
+            $boardState = json_decode($game['board_state'], true);
+            
+            // Liste de tous les mouvements possibles pour le bot
+        $possibleMoves = [];
+            $possibleCaptures = [];
+        
+            // Parcourir tout le plateau
+        for ($row = 0; $row < 8; $row++) {
+            for ($col = 0; $col < 8; $col++) {
+                    $piece = $boardState[$row][$col];
+                    
+                    // Vérifier si la pièce appartient au bot
+                    if ($piece !== null && $piece['player'] === $botNumber) {
+                        // Vérifier les captures multiples pour cette pièce
+                        $captures = $this->checkMultipleCaptures($boardState, $botNumber, $row, $col);
+                        
+                        if (!empty($captures)) {
+                            // Ajouter les captures aux mouvements possibles avec une priorité élevée
+                            foreach ($captures as $capture) {
+                                $possibleCaptures[] = $capture;
+                            }
+                        }
+                        
+                        // Chercher aussi les mouvements simples
+                        for ($newRow = 0; $newRow < 8; $newRow++) {
+                            for ($newCol = 0; $newCol < 8; $newCol++) {
+                                $validMove = $this->isValidMove($boardState, $row, $col, $newRow, $newCol, $botNumber);
+                                
+                                if ($validMove['valid']) {
+                                    if (isset($validMove['capture']) && $validMove['capture']) {
+                                        // Capture prioritaire
+                                        $possibleCaptures[] = [
+                                    'fromRow' => $row,
+                                    'fromCol' => $col,
+                                    'toRow' => $newRow,
+                                            'toCol' => $newCol,
+                                            'captureRow' => isset($validMove['captured']) ? $validMove['captured']['row'] : null,
+                                            'captureCol' => isset($validMove['captured']) ? $validMove['captured']['col'] : null
+                                        ];
+                                    } else {
+                                        // Mouvement simple
+                                        $possibleMoves[] = [
+                                            'fromRow' => $row,
+                                            'fromCol' => $col,
+                                            'toRow' => $newRow,
+                                            'toCol' => $newCol
+                                        ];
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Priorité aux captures
+            if (!empty($possibleCaptures)) {
+                $selectedMove = $possibleCaptures[array_rand($possibleCaptures)];
+            } 
+            // Si pas de capture, mouvement normal
+            else if (!empty($possibleMoves)) {
+                $selectedMove = $possibleMoves[array_rand($possibleMoves)];
+            } 
+            // Aucun mouvement possible, le bot a perdu
+            else {
+                // Mettre à jour le statut du jeu
+                $this->endGame($gameId, $botNumber === 1 ? 2 : 1, null);
+                
+                return [
+                    'success' => false,
+                    'message' => 'Le bot n\'a plus de mouvements possibles.'
+                ];
+            }
+            
+            // Effectuer le mouvement sélectionné
+            $result = $this->makeMove(
+                $gameId,
+                $selectedMove['fromRow'], 
+                $selectedMove['fromCol'], 
+                $selectedMove['toRow'], 
+                $selectedMove['toCol'], 
+                $botNumber
+            );
+            
+            // Vérifier si le mouvement a créé une dame (promotion)
+            $newResult = $this->getGame($gameId);
+            $newBoardState = json_decode($newResult['game']['board_state'], true);
+            $toRow = $selectedMove['toRow'];
+            $toCol = $selectedMove['toCol'];
+            
+            // Promotion en dame si un pion atteint la dernière rangée
+            if ($botNumber === 1 && $toRow === 7 && $newBoardState[$toRow][$toCol]['type'] === 'pawn') {
+                $newBoardState[$toRow][$toCol]['type'] = 'king';
+                $boardJson = json_encode($newBoardState);
+                
+                $query = "UPDATE games SET board_state = :board_state WHERE id = :game_id";
+                $stmt = $this->db->prepare($query);
+                $stmt->bindParam(':board_state', $boardJson);
+                $stmt->bindParam(':game_id', $gameId);
+                $stmt->execute();
+            } else if ($botNumber === 2 && $toRow === 0 && $newBoardState[$toRow][$toCol]['type'] === 'pawn') {
+                $newBoardState[$toRow][$toCol]['type'] = 'king';
+                $boardJson = json_encode($newBoardState);
+                
+                $query = "UPDATE games SET board_state = :board_state WHERE id = :game_id";
+                $stmt = $this->db->prepare($query);
+                $stmt->bindParam(':board_state', $boardJson);
+                $stmt->bindParam(':game_id', $gameId);
+                $stmt->execute();
+            }
+            
+            if ($result['success']) {
+                return [
+                    'success' => true,
+                    'message' => 'Le bot a joué',
+                    'move' => $selectedMove
+                ];
+            } else {
+                return $result;
+            }
+        } catch (Exception $e) {
+            error_log("Erreur dans makeBotMove: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Erreur lors du mouvement du bot: ' . $e->getMessage()
+            ];
+        }
     }
 }

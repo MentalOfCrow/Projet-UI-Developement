@@ -1116,31 +1116,87 @@ class GameController {
     /**
      * Met à jour les statistiques d'un joueur
      * @param int $user_id ID du joueur
-     * @param bool $is_winner Indique si le joueur a gagné la partie
-     * @return bool Succès de l'opération
+     * @param bool $is_winner True si le joueur a gagné, False sinon
      */
     private function updatePlayerStats($user_id, $is_winner) {
         try {
-            $query = "INSERT INTO stats (user_id, games_played, games_won, games_lost, last_game)
-                     VALUES (:user_id, 1, :games_won, :games_lost, NOW())
-                     ON DUPLICATE KEY UPDATE
-                     games_played = games_played + 1,
-                     games_won = games_won + :games_won,
-                     games_lost = games_lost + :games_lost,
-                     last_game = NOW()";
-                     
+            error_log("updatePlayerStats: Mise à jour des statistiques pour le joueur ID: {$user_id}, Victoire: " . ($is_winner ? 'Oui' : 'Non'));
+            
+            // Vérifier si l'utilisateur existe (pour éviter les erreurs de clé étrangère)
+            $checkUserQuery = "SELECT id FROM users WHERE id = :user_id";
+            $checkUserStmt = $this->db->prepare($checkUserQuery);
+            $checkUserStmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+            $checkUserStmt->execute();
+            
+            if ($checkUserStmt->rowCount() == 0) {
+                error_log("updatePlayerStats: Utilisateur ID {$user_id} non trouvé dans la base de données");
+                return false;
+            }
+            
+            // Mettre à jour les statistiques dans la table stats
+            // Utiliser INSERT ... ON DUPLICATE KEY UPDATE pour créer ou mettre à jour
+            $query = "INSERT INTO stats (user_id, games_played, games_won, games_lost, last_game) 
+                      VALUES (:user_id, 1, :wins, :losses, NOW()) 
+                      ON DUPLICATE KEY UPDATE 
+                      games_played = games_played + 1, 
+                      games_won = games_won + :wins, 
+                      games_lost = games_lost + :losses,
+                      last_game = NOW()";
+            
             $stmt = $this->db->prepare($query);
-            $games_won = $is_winner ? 1 : 0;
-            $games_lost = $is_winner ? 0 : 1;
+            $wins = $is_winner ? 1 : 0;
+            $losses = $is_winner ? 0 : 1;
             
             $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-            $stmt->bindParam(':games_won', $games_won, PDO::PARAM_INT);
-            $stmt->bindParam(':games_lost', $games_lost, PDO::PARAM_INT);
+            $stmt->bindParam(':wins', $wins, PDO::PARAM_INT);
+            $stmt->bindParam(':losses', $losses, PDO::PARAM_INT);
             
-            return $stmt->execute();
+            $result = $stmt->execute();
             
-        } catch (Exception $e) {
-            error_log("Erreur lors de la mise à jour des statistiques: " . $e->getMessage());
+            // Vérifier que les statistiques ont bien été mises à jour
+            $checkStatsQuery = "SELECT * FROM stats WHERE user_id = :user_id";
+            $checkStatsStmt = $this->db->prepare($checkStatsQuery);
+            $checkStatsStmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+            $checkStatsStmt->execute();
+            
+            if ($checkStatsStmt->rowCount() > 0) {
+                $stats = $checkStatsStmt->fetch(PDO::FETCH_ASSOC);
+                error_log("updatePlayerStats: Statistiques mises à jour - Parties: {$stats['games_played']}, Victoires: {$stats['games_won']}, Défaites: {$stats['games_lost']}");
+                return true;
+            } else {
+                error_log("updatePlayerStats: Les statistiques n'ont pas été mises à jour correctement");
+                return false;
+            }
+        } catch (PDOException $e) {
+            error_log("Erreur dans updatePlayerStats: " . $e->getMessage());
+            
+            // En cas d'erreur, vérifier si la table stats existe
+            try {
+                $checkTableQuery = "SHOW TABLES LIKE 'stats'";
+                $checkTableStmt = $this->db->query($checkTableQuery);
+                
+                if ($checkTableStmt->rowCount() == 0) {
+                    // La table stats n'existe pas, on la crée
+                    error_log("La table stats n'existe pas. Création de la table...");
+                    
+                    $createTableQuery = "CREATE TABLE IF NOT EXISTS stats (
+                        user_id INT PRIMARY KEY,
+                        games_played INT DEFAULT 0,
+                        games_won INT DEFAULT 0,
+                        games_lost INT DEFAULT 0,
+                        last_game TIMESTAMP NULL,
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                    )";
+                    
+                    $this->db->exec($createTableQuery);
+                    
+                    // Réessayer la mise à jour
+                    return $this->updatePlayerStats($user_id, $is_winner);
+                }
+            } catch (PDOException $tableError) {
+                error_log("Erreur lors de la vérification/création de la table stats: " . $tableError->getMessage());
+            }
+            
             return false;
         }
     }

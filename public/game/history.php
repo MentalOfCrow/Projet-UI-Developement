@@ -122,7 +122,8 @@ try {
         $victories = $stats['games_won']; 
         $defeats = $stats['games_lost'];
         // Calculer les matchs nuls à partir de la table stats si disponible, sinon faire la différence
-        $draws = isset($stats['games_drawn']) ? $stats['games_drawn'] : ($total_games - $victories - $defeats);
+        // Un match nul est défini uniquement lorsque les deux joueurs sont bloqués
+        $draws = $total_games - $victories - $defeats;
         error_log("history.php: Statistiques calculées à partir de la table stats - total: {$total_games}, victoires: {$victories}, défaites: {$defeats}, nuls: {$draws}");
     } else {
         error_log("history.php: Aucune statistique trouvée dans la table stats, calcul à partir de l'historique");
@@ -277,7 +278,7 @@ $pageTitle = "Historique des parties - " . APP_NAME;
                                 $resultText = "Match nul";
                                 $resultIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
                                 
-                                // Cas spécial: partie contre l'IA avec winner_id null = défaite automatique
+                                // Cas spécial: partie contre l'IA avec winner_id null, c'est une défaite pour le joueur humain
                                 if (($game['player2_id'] === '0' || $game['player2_id'] === 0) && $game['winner_id'] === null) {
                                     $resultClass = "bg-red-100 text-red-800";
                                     $resultText = "Défaite";
@@ -294,6 +295,13 @@ $pageTitle = "Historique des parties - " . APP_NAME;
                                         $resultText = "Défaite";
                                         $resultIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
                                     }
+                                }
+                                // Match nul ne peut arriver que quand les deux joueurs sont bloqués et winner_id est null
+                                // Ce cas est rare mais possible lorsque aucun des joueurs ne peut bouger
+                                else if ($game['winner_id'] === null && $game['player2_id'] != 0) {
+                                    $resultClass = "bg-blue-100 text-blue-800";
+                                    $resultText = "Match nul";
+                                    $resultIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
                                 }
                                 
                                 // Formater la date

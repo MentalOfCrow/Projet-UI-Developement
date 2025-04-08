@@ -155,8 +155,14 @@ try {
                     $victories++;
                     error_log("history.php: Partie " . $game['id'] . " comptée comme victoire");
                 } elseif ($game['winner_id'] === null) {
-                    $draws++;
-                    error_log("history.php: Partie " . $game['id'] . " comptée comme match nul");
+                    // Vérifier si c'est une partie contre l'IA (player2_id = 0)
+                    if ($game['player2_id'] === '0' || $game['player2_id'] === 0) {
+                        $defeats++;
+                        error_log("history.php: Partie " . $game['id'] . " contre IA comptée comme défaite");
+                    } else {
+                        $draws++;
+                        error_log("history.php: Partie " . $game['id'] . " comptée comme match nul");
+                    }
                 } else {
                     $defeats++;
                     error_log("history.php: Partie " . $game['id'] . " comptée comme défaite");
@@ -268,7 +274,14 @@ $pageTitle = "Historique des parties - " . APP_NAME;
                                 $resultText = "Match nul";
                                 $resultIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
                                 
-                                if ($game['winner_id'] !== null) {
+                                // Cas spécial: partie contre l'IA avec winner_id null = défaite automatique
+                                if (($game['player2_id'] === '0' || $game['player2_id'] === 0) && $game['winner_id'] === null) {
+                                    $resultClass = "bg-red-100 text-red-800";
+                                    $resultText = "Défaite";
+                                    $resultIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
+                                }
+                                // Cas standard avec winner_id défini
+                                else if ($game['winner_id'] !== null) {
                                     if ($game['winner_id'] == $user_id) {
                                         $resultClass = "bg-green-100 text-green-800";
                                         $resultText = "Victoire";

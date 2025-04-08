@@ -121,7 +121,9 @@ try {
         $total_games = $stats['games_played'];
         $victories = $stats['games_won']; 
         $defeats = $stats['games_lost'];
-        $draws = $total_games - $victories - $defeats;
+        // Calculer les matchs nuls à partir de la table stats si disponible, sinon faire la différence
+        $draws = isset($stats['games_drawn']) ? $stats['games_drawn'] : ($total_games - $victories - $defeats);
+        error_log("history.php: Statistiques calculées à partir de la table stats - total: {$total_games}, victoires: {$victories}, défaites: {$defeats}, nuls: {$draws}");
     } else {
         error_log("history.php: Aucune statistique trouvée dans la table stats, calcul à partir de l'historique");
         // Si pas de statistiques dans la table stats, calculer depuis l'historique
@@ -151,21 +153,22 @@ try {
                           ", player2_id: " . $game['player2_id'] . 
                           ", winner_id: " . $game['winner_id']);
                 
-                if ($game['winner_id'] == $user_id) {
-                    $victories++;
-                    error_log("history.php: Partie " . $game['id'] . " comptée comme victoire");
-                } elseif ($game['winner_id'] === null) {
-                    // Vérifier si c'est une partie contre l'IA (player2_id = 0)
-                    if ($game['player2_id'] === '0' || $game['player2_id'] === 0) {
-                        $defeats++;
-                        error_log("history.php: Partie " . $game['id'] . " contre IA comptée comme défaite");
-                    } else {
-                        $draws++;
-                        error_log("history.php: Partie " . $game['id'] . " comptée comme match nul");
-                    }
-                } else {
+                if ($game['winner_id'] === null && $game['player2_id'] == 0) {
+                    // Partie contre l'IA sans gagnant = défaite
                     $defeats++;
-                    error_log("history.php: Partie " . $game['id'] . " comptée comme défaite");
+                    error_log("history.php: Partie ID: " . $game['id'] . " = défaite (contre IA sans gagnant)");
+                } else if ($game['winner_id'] == $user_id) {
+                    // L'utilisateur est le gagnant
+                    $victories++;
+                    error_log("history.php: Partie ID: " . $game['id'] . " = victoire");
+                } else if ($game['winner_id'] !== null && $game['winner_id'] != $user_id) {
+                    // L'adversaire est le gagnant
+                    $defeats++;
+                    error_log("history.php: Partie ID: " . $game['id'] . " = défaite (l'adversaire a gagné)");
+                } else if ($game['winner_id'] === null && $game['player2_id'] != 0) {
+                    // Match nul (winner_id = null et pas contre l'IA)
+                    $draws++;
+                    error_log("history.php: Partie ID: " . $game['id'] . " = match nul");
                 }
             }
             

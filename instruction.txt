@@ -3,23 +3,23 @@ DÉVELOPEMENT
 MISE EN PRATIQUE
 Ce module va vous permettre de mettre en
 œuvre les compétences acquises dans les
-modules “Développement Logiciels” et “Base de
-données” en réalisant un projet concrète.
+modules "Développement Logiciels" et "Base de
+données" en réalisant un projet concrète.
 INNOVATION
-Qu’il s’agisse d’un projet libre ou du serveur de
-matchmaking proposé, vous bénéficiez d’une
+Qu'il s'agisse d'un projet libre ou du serveur de
+matchmaking proposé, vous bénéficiez d'une
 totale liberté technologique pour explorer, créer
 et challenger vos compétences.
-Travailler en binôme favorise l’échange d’idées
+Travailler en binôme favorise l'échange d'idées
 et le partage des connaissances, renforçant
-ainsi l’apprentissage collectif.
+ainsi l'apprentissage collectif.
 COLLABORATION
 PROGRAMME
 02
 DÉROULÉ
 DU MODULE
 13
-UNE PHASE D’AUTONOMIE
+UNE PHASE D'AUTONOMIE
 Permet d'
 avancer sur le développement de votre projet en dehors des séances,
 favorisant ainsi la prise d'initiative et l'
@@ -89,7 +89,7 @@ Implémenter un CRUD sur au moins une donnée essentielle au logiciel.
 06
 Étapes pour déposer votre proposition
 Lire le sujet
-Prenez connaissance de la grille d’évaluation et des critères du projet libre.
+Prenez connaissance de la grille d'évaluation et des critères du projet libre.
 Définir votre idée
 Brainstormez pour choisir un concept qui respecte les exigences (28 points de difficulté).
 Rédiger la proposition
@@ -103,12 +103,12 @@ PROJET LIBRE
 07
 Pour ce module nous retrouvons plusieurs dates clé importantes. Liste des dates clé :
 Mardi 12 mars à 12h30 - Date limite pour proposer un projet & former les équipes.
-Jeudi 03 avril de 13h30 à 17h30 - Soutenance orale point d’avancement.
+Jeudi 03 avril de 13h30 à 17h30 - Soutenance orale point d'avancement.
 Lundi 12 mai de 13h30 à 17h30 - Rendu & Soutenance orale finale du projet.
 LES DATES CLÉ
 DU MODULE
 08
-*Consultez le sujet pour obtenir plus de détails sur ces dates (déroulé, la grille d’évaluation, etc...)
+*Consultez le sujet pour obtenir plus de détails sur ces dates (déroulé, la grille d'évaluation, etc...)
 AVEZ-VOUS DES QUESTIONS ?
 09
 LES OBJECTIFS
@@ -119,12 +119,136 @@ OBJECTIFS
 Objectifs de la séance du 10/03 :
 Consulter les projets en détails
 Examiner les différentes propositions pour bien comprendre les enjeux et identifier les demandes, dans
-l’objectif de sélectionner un projet.
+l'objectif de sélectionner un projet.
 Proposer un projet (si besoin)
 Présenter votre idée de projet et la déposer sur Moodle pour la soumettre à validation.
 Former les équipes & remplir les équipes sur Moodle
-Organiser les groupes de travail et s’assurer que chaque membre est correctement inscrit sur Moodle.
+Organiser les groupes de travail et s'assurer que chaque membre est correctement inscrit sur Moodle.
 Brainstormer & commencer à mettre en place la gestion de projet
 Lancer une session de réflexion pour structurer le projet, définir les étapes clés et répartir les tâches entre les
 membres du groupe.
 C'EST PARTI !
+
+-----------------------------------------------------------
+
+## Instructions pour l'évolution sociale du jeu de dames
+
+### Système d'amis
+1. Affichage des pseudos pendant les parties
+   - Pseudo du joueur d'un côté, adversaire de l'autre
+   - Petite icône/avatar à côté de chaque pseudo
+   - Indicateur de statut (en ligne/hors ligne/en jeu)
+
+2. Interaction sociale
+   - Cliquer sur un pseudo ouvre une carte de profil
+   - Bouton "Ajouter en ami" directement accessible
+   - Affichage rapide des statistiques (parties jouées, niveau)
+
+3. Gestion des amis
+   - Table "friends" dans la base de données
+   - Relation bidirectionnelle (demande + acceptation)
+   - Liste d'amis accessible depuis le profil
+
+4. Notifications d'amitié
+   - Zone de notifications en haut de l'interface
+   - Messages comme "X vous a envoyé une demande d'ami"
+   - Options pour accepter/refuser directement
+
+### Gestion des profils utilisateurs
+1. Personnalisation du profil
+   - Pseudo et mot de passe modifiables
+   - Icône/avatar personnalisable (upload d'image ou sélection parmi des avatars prédéfinis)
+   - Image par défaut basée sur l'initiale du pseudo
+
+2. Données du profil
+   - Pas d'email requis pour simplifier l'expérience utilisateur
+   - Statistiques de jeu affichées (parties jouées, victoires, défaites)
+   - Date d'inscription et dernière connexion
+
+3. Paramètres de confidentialité
+   - Visibilité du profil (public, amis seulement, privé)
+   - Qui peut envoyer des demandes d'ami
+   - Option pour apparaître hors ligne
+
+### Système d'invitation de partie
+1. Inviter un ami à jouer
+   - Liste d'amis en ligne dans le menu principal
+   - Bouton "Défier" à côté de chaque ami
+   - Notification envoyée à l'ami défié
+
+2. Accepter/refuser une invitation
+   - Notification avec options Accept/Refuse
+   - Redirection automatique vers la partie en cas d'acceptation
+   - Message de refus personnalisable
+
+### Système de chat
+1. Chat pendant la partie
+   - Zone de chat à côté du plateau
+   - Messages prédéfinis pour faciliter les échanges rapides
+   - Option pour désactiver le chat (paramètres de confidentialité)
+
+2. Chat privé avec les amis
+   - Messagerie accessible depuis la liste d'amis
+   - Historique des conversations sauvegardé
+   - Notification de nouveaux messages
+
+3. Modération et sécurité
+   - Filtre anti-spam et contenu inapproprié
+   - Option pour signaler un joueur
+   - Possibilité de bloquer un joueur
+
+### Modifications techniques requises
+1. Base de données
+   - Nouvelle table "friends" (user_id, friend_id, status, date_added)
+   - Nouvelle table "messages" (sender_id, receiver_id, content, timestamp, read_status)
+   - Nouvelle table "friend_requests" (sender_id, receiver_id, status, timestamp)
+
+2. Backend
+   - API pour la gestion des amis (ajouter, supprimer, bloquer)
+   - API pour l'envoi/réception de messages
+   - Système de notifications en temps réel (WebSockets recommandés)
+
+3. Frontend
+   - Interface utilisateur pour la gestion des amis
+   - Composant de chat intégré à l'interface de jeu
+   - Système de notifications visibles
+
+### Approche d'implémentation
+1. Phase 1: Système d'amis basique
+   - Affichage des profils
+   - Envoi/acceptation de demandes d'amis
+   - Liste d'amis
+
+2. Phase 2: Invitations de jeu
+   - Possibilité de défier un ami
+   - Notifications d'invitation
+
+3. Phase 3: Système de chat
+   - Chat pendant les parties
+   - Messages privés entre amis
+
+Cette approche progressive permettra d'implémenter le système social tout en continuant à améliorer les fonctionnalités de base du jeu.
+
+### Système d'analyse de parties
+> IMPORTANT : Toutes les fonctionnalités d'analyse décrites ci-dessous sont disponibles UNIQUEMENT pour les parties terminées, jamais pendant une partie active. Le joueur doit d'abord sélectionner une partie depuis son historique pour accéder à ces outils d'analyse.
+
+1. Replay des parties terminées
+   - Interface permettant de visionner le déroulement d'une partie coup par coup
+   - Boutons "suivant" et "précédent" pour naviguer dans l'historique des coups
+   - Option pour accélérer/ralentir la lecture automatique
+
+2. Analyse statistique en temps réel
+   - Affichage du taux de victoire estimé après chaque coup (comme sur chess.com)
+   - Mise à jour du pourcentage de victoire en temps réel à chaque mouvement rejoué
+   - Indication visuelle des bons coups (vert) et des erreurs (rouge)
+
+3. Intelligence artificielle d'analyse
+   - Suggestions de meilleurs coups à chaque position critique
+   - Calcul du taux de victoire théorique basé sur le nombre de pions et leur position
+   - Graphique d'évolution du taux de victoire tout au long de la partie
+
+4. Apprentissage personnalisé
+   - Identification des erreurs récurrentes du joueur
+   - Recommandations d'exercices ciblés pour améliorer ses points faibles
+   - Statistiques sur les types d'ouvertures et de fins de parties préférées
+

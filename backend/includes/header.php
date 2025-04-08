@@ -24,6 +24,7 @@
                 <div class="hidden md:flex space-x-6">
                     <a href="/" class="hover:text-purple-200 transition">Accueil</a>
                     <a href="/game/play.php" class="hover:text-purple-200 transition">Jouer</a>
+                    <a href="/game/history.php" class="hover:text-purple-200 transition">Historique</a>
                     <a href="/pages/about.php" class="hover:text-purple-200 transition">À propos</a>
                     <a href="/pages/help.php" class="hover:text-purple-200 transition">Aide</a>
                     <a href="/pages/faq.php" class="hover:text-purple-200 transition">FAQ</a>
@@ -56,9 +57,9 @@
                                     </svg>
                                     Mes parties
                                 </a>
-                                <a href="/game/play.php#history-section" class="block px-4 py-2 text-sm text-gray-700 hover:bg-purple-100 flex items-center">
+                                <a href="/game/history.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-purple-100 flex items-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                     Historique des parties
                                 </a>
@@ -98,6 +99,7 @@
                         <div class="container mx-auto px-4 py-2">
                             <a href="/" class="block py-2 hover:text-purple-200 transition">Accueil</a>
                             <a href="/game/play.php" class="block py-2 hover:text-purple-200 transition">Jouer</a>
+                            <a href="/game/history.php" class="block py-2 hover:text-purple-200 transition">Historique</a>
                             <a href="/pages/about.php" class="block py-2 hover:text-purple-200 transition">À propos</a>
                             <a href="/pages/help.php" class="block py-2 hover:text-purple-200 transition">Aide</a>
                             <a href="/pages/faq.php" class="block py-2 hover:text-purple-200 transition">FAQ</a>

@@ -278,12 +278,22 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Charger les mouvements depuis l'API
     function loadGameMoves() {
+        console.log("Chargement des mouvements pour la partie: <?php echo $game_id; ?>");
+        
         fetch(`/api/game/get_game_moves.php?game_id=<?php echo $game_id; ?>`)
-            .then(response => response.json())
+            .then(response => {
+                console.log("Réponse reçue du serveur");
+                return response.json();
+            })
             .then(data => {
+                console.log("Données reçues:", data);
+                
                 if (data.success) {
                     gameInfo = data.game;
                     moves = data.moves;
+                    
+                    console.log("Mouvements récupérés:", moves.length);
+                    console.log("Premier mouvement:", moves.length > 0 ? moves[0] : "Aucun");
                     
                     // Initialiser le plateau et l'affichage
                     initBoard();
@@ -486,6 +496,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Générer la liste des mouvements
     function generateMovesList() {
         movesList.innerHTML = '';
+        
+        console.log("Génération de la liste des mouvements. Nombre de coups: " + moves.length);
         
         // Ajouter la position initiale comme "mouvement 0"
         const initialRow = document.createElement('tr');

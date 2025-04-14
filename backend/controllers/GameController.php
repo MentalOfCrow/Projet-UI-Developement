@@ -17,19 +17,29 @@ class GameController {
      */
     public function __construct() {
         try {
-            // Obtenir l'instance de la base de données
-            $database = Database::getInstance();
-            // Récupérer la connexion
-            $this->db = $database->getConnection();
-            // Initialiser le modèle de jeu
-            $this->game = new Game();
+            // Établir la connexion à la base de données
+            error_log("GameController::__construct - tentative de récupération de la connexion");
+            $this->db = Database::getInstance()->getConnection();
             
             // Vérifier que la connexion est établie
-            if (!$this->db) {
-                error_log("ERREUR: Impossible d'établir une connexion à la base de données dans GameController");
+            if (!($this->db instanceof PDO)) {
+                error_log("GameController: Échec de la connexion à la base de données - La connexion n'est pas un objet PDO");
+                throw new Exception("Impossible de se connecter à la base de données");
             }
+            
+            // Vérifions le type de $this->db
+            error_log("GameController::__construct - type de this->db: " . get_class($this->db));
+            
+            // Vérifier si $this->db est une instance de PDO
+            error_log("GameController::__construct - La connexion est bien une instance de PDO");
+
+            // Initialiser le modèle Game
+            error_log("GameController::__construct - initialisation du modèle Game");
+            $this->game = new Game($this->db);
+            error_log("GameController::__construct - modèle Game initialisé avec succès");
         } catch (Exception $e) {
-            error_log("Exception dans GameController::__construct: " . $e->getMessage());
+            error_log("GameController: " . $e->getMessage());
+            throw $e; // Propager l'exception pour qu'elle puisse être capturée dans play.php
         }
     }
     
@@ -96,6 +106,29 @@ class GameController {
      */
     public function getGame($id, $history = false) {
         try {
+            // Logs détaillés pour le débogage
+            error_log("GameController::getGame - ID reçu: " . var_export($id, true));
+            error_log("GameController::getGame - Type de l'ID: " . gettype($id));
+            error_log("GameController::getGame - Demande d'historique: " . ($history ? 'Oui' : 'Non'));
+            
+            // Vérifier si l'ID est valide
+            if (!$id || !is_numeric($id)) {
+                error_log("GameController::getGame - ID invalide: " . var_export($id, true));
+                return [
+                    'success' => false,
+                    'message' => 'ID de partie invalide.'
+                ];
+            }
+            
+            // Vérifier la connexion à la base de données
+            if (!$this->db) {
+                error_log("GameController::getGame - Connexion à la base de données non disponible");
+                return [
+                    'success' => false,
+                    'message' => 'Connexion à la base de données non disponible.'
+                ];
+            }
+            
             // Enregistrer cette action pour le débogage
             error_log("getGame appelé pour l'ID de partie: " . $id);
             
@@ -111,6 +144,7 @@ class GameController {
             
             $stmt = $conn->prepare($query);
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            error_log("GameController::getGame - Exécution de la requête pour l'ID: " . $id);
             $stmt->execute();
             
             $game = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -137,6 +171,8 @@ class GameController {
                 ];
             }
             
+            error_log("GameController::getGame - Partie trouvée avec succès pour l'ID: " . $id);
+            
             // Si l'adversaire est un bot (identifié par player2_id = 0), définir un nom pour le bot
             if ($game['player2_id'] === '0' || $game['player2_id'] === 0) {
                 $game['player2_name'] = 'IA';
@@ -161,6 +197,7 @@ class GameController {
             ];
         } catch (PDOException $e) {
             error_log("Erreur dans getGame: " . $e->getMessage());
+            error_log("Trace: " . $e->getTraceAsString());
             return [
                 'success' => false,
                 'message' => 'Erreur lors de la récupération de la partie: ' . $e->getMessage()
@@ -178,7 +215,7 @@ class GameController {
             $query = "SELECT g.*, 
                       u1.username as player1_name, 
                       u2.username as player2_name 
-                      FROM {$this->game->table} g
+                      FROM " . Game::TABLE . " g
                       JOIN users u1 ON g.player1_id = u1.id
                       JOIN users u2 ON g.player2_id = u2.id
                       WHERE (g.player1_id = :player_id OR g.player2_id = :player_id) 
@@ -330,43 +367,55 @@ class GameController {
     public function makeMove($game_id, $from_row, $from_col, $to_row, $to_col, $player) {
         try {
             // Récupérer l'état actuel de la partie
-            $result = $this->getGame($game_id);
-            if (!$result['success']) {
+            $query = "SELECT * FROM games WHERE id = :game_id";
+            $stmt = $this->db->prepare($query);
+            $stmt->bindParam(':game_id', $game_id);
+            $stmt->execute();
+            
+            $game = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$game) {
                 return [
                     'success' => false,
                     'message' => 'Partie introuvable.'
                 ];
             }
             
-            $game = $result['game'];
-            
-            // Vérifier si la partie est toujours en cours
+            // Vérifier que la partie est en cours
             if ($game['status'] !== 'in_progress') {
                 return [
                     'success' => false,
-                    'message' => 'Cette partie est déjà terminée.'
+                    'message' => 'Cette partie est terminée.'
                 ];
             }
             
-            // Vérifier si c'est bien le tour du joueur
-            if (intval($game['current_player']) !== $player) {
+            // Vérifier que c'est au tour du joueur
+            if ($game['current_player'] != $player) {
                 return [
                     'success' => false,
                     'message' => 'Ce n\'est pas votre tour.'
                 ];
             }
             
-            // Décoder l'état du plateau
+            // Récupérer l'état du plateau
             $board = json_decode($game['board_state'], true);
             
-            // Vérifier que la position de départ contient bien une pièce du joueur
+            // Vérifier que la case de départ contient une pièce du joueur
             if (!isset($board[$from_row][$from_col]) || 
                 !is_array($board[$from_row][$from_col]) || 
-                !isset($board[$from_row][$from_col]['player']) || 
                 $board[$from_row][$from_col]['player'] != $player) {
+                    
                 return [
                     'success' => false,
-                    'message' => 'Position de départ invalide.'
+                    'message' => 'Aucune pièce à vous sur la case de départ.'
+                ];
+            }
+            
+            // Vérifier que la case d'arrivée est vide
+            if (isset($board[$to_row][$to_col]) && $board[$to_row][$to_col] !== null) {
+                return [
+                    'success' => false,
+                    'message' => 'La case d\'arrivée est déjà occupée.'
                 ];
             }
             
@@ -381,7 +430,7 @@ class GameController {
             }
             
             // Capture d'une pièce adverse
-            $captured = isset($validMove['captured']) ? $validMove['captured'] : false;
+            $captured = isset($validMove['capture']) && $validMove['capture'];
             
             // Effectuer le mouvement sur le plateau
             $newBoard = $this->moveChecker($board, $from_row, $from_col, $to_row, $to_col, $player, $validMove);
@@ -399,9 +448,13 @@ class GameController {
             
             // Déterminer le prochain joueur (si le joueur actuel peut encore capturer, c'est encore son tour)
             $canCaptureAgain = false;
-            if ($captured && $this->canCaptureFrom($newBoard, $to_row, $to_col, $player)) {
-                $canCaptureAgain = true;
-                $nextPlayer = $player; // Le joueur continue son tour
+            if ($captured) {
+                // Vérifier si la pièce déplacée peut encore capturer
+                $canCaptureAgain = $this->canCaptureFrom($newBoard, $to_row, $to_col, $player);
+                
+                if ($canCaptureAgain) {
+                    $nextPlayer = $player; // Le joueur continue son tour
+                }
             }
             
             // Mettre à jour l'état de la partie dans la base de données
@@ -460,7 +513,7 @@ class GameController {
             error_log("Erreur dans makeMove: " . $e->getMessage());
             return [
                 'success' => false,
-                'message' => 'Erreur technique: ' . $e->getMessage()
+                'message' => 'Erreur lors du mouvement: ' . $e->getMessage()
             ];
         }
     }
@@ -516,13 +569,13 @@ class GameController {
         $isKing = isset($board[$from_row][$from_col]['type']) && $board[$from_row][$from_col]['type'] === 'king';
         
         // Direction de déplacement pour les pions (selon le joueur)
-        $forward_direction = ($player == 1) ? 1 : -1; // Joueur 1 va vers le bas, Joueur 2 vers le haut
+        $forward_direction = ($player == 1) ? 1 : -1;
         
         // Calculer la distance du mouvement
         $row_distance = $to_row - $from_row;
         $col_distance = abs($to_col - $from_col);
         
-        // Vérifier si le mouvement est en diagonale (la distance en lignes et colonnes doit être égale)
+        // Vérifier si le mouvement est en diagonale
         if (abs($row_distance) != $col_distance) {
                 return [
                     'valid' => false, 
@@ -545,8 +598,7 @@ class GameController {
                 ];
             }
             
-                // Pour les pions, vérifier qu'ils se déplacent uniquement dans leur direction
-                // SAUF pour les captures qui peuvent être en arrière
+                // Pour les déplacements simples uniquement, vérifier la direction
                 if (($player == 1 && $row_distance < 0) || ($player == 2 && $row_distance > 0)) {
             return [
                         'valid' => false,
@@ -554,7 +606,6 @@ class GameController {
             ];
         }
         
-                // Mouvement simple valide pour un pion
                 return [
                     'valid' => true,
                     'message' => 'Mouvement valide.',
@@ -574,15 +625,12 @@ class GameController {
                     $board[$capture_row][$capture_col]['player'] != $player) {
                     
                     // Si on a une capture disponible mais pas celle qu'on essaie de faire,
-                    // vérifier si le mouvement actuel est une capture valide
-                    if ($hasCapture) {
-                        // Vérifier si cette pièce spécifique peut capturer
-                        if (!$this->canCaptureFrom($board, $from_row, $from_col, $player)) {
+                    // vérifier si cette pièce spécifique peut capturer
+                    if ($hasCapture && !$this->canCaptureFrom($board, $from_row, $from_col, $player)) {
                 return [
                     'valid' => false, 
-                                'message' => 'Vous devez capturer avec une pièce qui peut le faire.'
+                            'message' => 'Vous devez capturer avec une pièce qui peut le faire.'
                 ];
-                        }
             }
             
                     // Capture valide pour un pion (peut être en avant ou en arrière)
@@ -594,24 +642,19 @@ class GameController {
                     'row' => $capture_row,
                     'col' => $capture_col
                 ]
-                    ];
-                } else {
-                    return [
-                        'valid' => false,
-                        'message' => 'Aucune pièce adverse à capturer.'
-                    ];
-                }
-            } else {
-                return [
-                    'valid' => false,
-                    'message' => 'Mouvement invalide pour un pion.'
+            ];
+        }
+        
+                        return [
+                            'valid' => false, 
+                    'message' => 'Aucune pièce adverse à capturer.'
                 ];
             }
         }
         // Logique pour les dames
         else {
             // Vérifier si le joueur est obligé de capturer et si cette dame peut capturer
-            if ($hasCapture && !$this->canCaptureFrom($board, $from_row, $from_col, $player) && abs($row_distance) == 1) {
+            if ($hasCapture && !$this->canCaptureFrom($board, $from_row, $from_col, $player)) {
                 return [
                     'valid' => false,
                     'message' => 'Vous avez une capture obligatoire à effectuer avec une autre pièce.'
@@ -622,32 +665,32 @@ class GameController {
             $row_dir = ($row_distance > 0) ? 1 : -1;
             $col_dir = ($to_col > $from_col) ? 1 : -1;
             
-            // Vérifier si le chemin est libre pour un déplacement simple
+            // Vérifier si le chemin est libre
             $current_row = $from_row + $row_dir;
             $current_col = $from_col + $col_dir;
             $capture = false;
             $captured = null;
             
-            while ($current_row != $to_row && $current_col != $to_col) {
-                // Si une pièce est sur le chemin
+            // Corriger la condition de la boucle pour vérifier correctement le chemin
+            while ($current_row != $to_row || $current_col != $to_col) {
                 if (isset($board[$current_row][$current_col]) && $board[$current_row][$current_col] !== null) {
-                    // Si c'est déjà la deuxième pièce sur le chemin, le mouvement est invalide
+                    // Si on a déjà trouvé une pièce sur le chemin, le mouvement est invalide
                     if ($capture) {
-                        return [
-                            'valid' => false,
+                return [
+                    'valid' => false, 
                             'message' => 'Une dame ne peut pas sauter par-dessus plusieurs pièces.'
-                        ];
-                    }
-                    
+                ];
+            }
+            
                     // Si c'est une pièce du même joueur, le mouvement est invalide
                     if ($board[$current_row][$current_col]['player'] == $player) {
-                        return [
-                            'valid' => false, 
+                return [
+                            'valid' => false,
                             'message' => 'Une dame ne peut pas sauter par-dessus ses propres pièces.'
                         ];
                     }
                     
-                    // C'est une pièce adverse, c'est potentiellement une capture
+                    // C'est une pièce adverse, marquer comme capture potentielle
                     $capture = true;
                     $captured = [
                         'row' => $current_row,
@@ -655,44 +698,40 @@ class GameController {
                     ];
                 }
                 
-                // Avancer vers la destination
                 $current_row += $row_dir;
                 $current_col += $col_dir;
-            }
-            
-            // Si on a trouvé une capture et qu'on arrive à destination, c'est une capture valide
+                
+                // Vérifier si on est toujours sur le plateau
+                if ($current_row < 0 || $current_row > 7 || $current_col < 0 || $current_col > 7) {
+                    return [
+                        'valid' => false, 
+                        'message' => 'Mouvement hors des limites du plateau.'
+                    ];
+                }
+                }
+                
+            // Si on a trouvé une capture, retourner les informations
             if ($capture) {
-                // Vérifier si cette dame devait capturer ailleurs
-                if ($hasCapture && !$this->canCaptureFrom($board, $from_row, $from_col, $player)) {
-                return [
-                    'valid' => false, 
-                        'message' => 'Vous devez capturer avec une pièce qui peut le faire.'
-                ];
-            }
-            
                 return [
                     'valid' => true,
-                    'message' => 'Capture valide pour une dame.',
+                    'message' => 'Capture valide.',
                     'capture' => true,
                     'captured' => $captured
                 ];
             }
             
-            // Si aucune pièce n'a été rencontrée, c'est un déplacement simple valide
-            // mais uniquement s'il n'y a pas de capture obligatoire ailleurs
-            if ($hasCapture) {
-                    return [
-                        'valid' => false, 
-                    'message' => 'Vous avez une capture obligatoire à effectuer.'
-                    ];
-                }
-                
-                return [
-                    'valid' => true,
-                'message' => 'Mouvement valide pour une dame.',
+            // Mouvement simple valide pour une dame
+            return [
+                'valid' => true,
+                'message' => 'Mouvement valide.',
                     'capture' => false
                 ];
-            }
+        }
+        
+        return [
+            'valid' => false, 
+            'message' => 'Mouvement invalide.'
+        ];
     }
     
     /**
@@ -749,7 +788,7 @@ class GameController {
 
         foreach ($directions as $dir) {
             // Pour les pions, on vérifie seulement une case plus loin
-        if (!$isKing) {
+            if (!$isKing) {
                 $captureRow = $row + $dir['row'];
                 $captureCol = $col + $dir['col'];
                 $landingRow = $row + 2 * $dir['row'];
@@ -776,43 +815,44 @@ class GameController {
                         return true;
                     }
                 }
-            }
-            // Pour les dames, on vérifie sur toute la diagonale
+            } 
+            // Pour les dames, on vérifie plus loin (jusqu'au bord du plateau)
             else {
-                $currentRow = $row + $dir['row'];
-                $currentCol = $col + $dir['col'];
-                $foundOpponent = false;
-                $captureRow = -1;
-                $captureCol = -1;
-
-                // Parcourir la diagonale
-                while ($currentRow >= 0 && $currentRow <= 7 && $currentCol >= 0 && $currentCol <= 7) {
+                $step_row = $dir['row'];
+                $step_col = $dir['col'];
+                $capture_row = -1;
+                $capture_col = -1;
+                $found_opponent = false;
+                $current_row = $row + $step_row;
+                $current_col = $col + $step_col;
+                
+                while ($current_row >= 0 && $current_row <= 7 && $current_col >= 0 && $current_col <= 7) {
                     // Si on trouve une pièce
-                    if (isset($board[$currentRow][$currentCol]) && $board[$currentRow][$currentCol] !== null) {
-                        // Si on a déjà trouvé une pièce adverse, on ne peut pas capturer celle-ci
-                        if ($foundOpponent) {
+                    if (isset($board[$current_row][$current_col]) && $board[$current_row][$current_col] !== null) {
+                        // Si on a déjà trouvé un adversaire, on ne peut pas capturer (chemin bloqué)
+                        if ($found_opponent) {
                             break;
                         }
                         
-                        // Si c'est une pièce du même joueur, on ne peut pas capturer dans cette direction
-                        if ($board[$currentRow][$currentCol]['player'] == $player) {
+                        // Si c'est notre propre pièce, on ne peut pas capturer
+                        if ($board[$current_row][$current_col]['player'] == $player) {
                             break;
                         }
                         
                         // C'est une pièce adverse, on peut potentiellement la capturer
-                        $foundOpponent = true;
-                        $captureRow = $currentRow;
-                        $captureCol = $currentCol;
+                        $found_opponent = true;
+                        $capture_row = $current_row;
+                        $capture_col = $current_col;
+                        
                     } 
-                    // Si on trouve une case vide après avoir trouvé une pièce adverse
-                    else if ($foundOpponent) {
-                        // On peut capturer la pièce adverse
+                    // Si on a trouvé un adversaire et qu'on arrive sur une case vide, on peut capturer
+                    else if ($found_opponent) {
                         return true;
                     }
                     
-                    // Continuer dans la direction
-                    $currentRow += $dir['row'];
-                    $currentCol += $dir['col'];
+                    // Avancer à la case suivante
+                    $current_row += $step_row;
+                    $current_col += $step_col;
                 }
             }
         }
@@ -1064,20 +1104,27 @@ class GameController {
             $this->db->beginTransaction();
             
             // Récupérer les informations de la partie
-            $query = "SELECT player1_id, player2_id, board_state FROM games WHERE id = :game_id";
+            $query = "SELECT * FROM games WHERE id = :game_id";
             $stmt = $this->db->prepare($query);
             $stmt->bindParam(':game_id', $game_id);
             $stmt->execute();
             
             $gameInfo = $stmt->fetch(PDO::FETCH_ASSOC);
+            
             if (!$gameInfo) {
-                // La partie n'existe pas
+                error_log("endGame: Partie ID {$game_id} introuvable");
                 $this->db->rollBack();
-                error_log("endGame: Partie introuvable avec l'ID: " . $game_id);
                 return false;
             }
             
-            error_log("endGame: Traitement de fin de partie ID: {$game_id}, winner_id: {$winner_id}, loser_id: " . ($loser_id ?? 'null'));
+            // Si la partie est déjà terminée, ne rien faire
+            if ($gameInfo['status'] === 'finished') {
+                error_log("endGame: La partie ID {$game_id} est déjà terminée (statut: {$gameInfo['status']})");
+                $this->db->rollBack();
+                return true;
+            }
+            
+            error_log("endGame: Traitement de fin de partie ID: {$game_id}, winner_id: " . ($winner_id ?? 'null') . ", loser_id: " . ($loser_id ?? 'null'));
             error_log("endGame: Infos partie - player1_id: {$gameInfo['player1_id']}, player2_id: {$gameInfo['player2_id']}");
             
             // Vérifier si c'est un match nul (les deux joueurs sont bloqués)
@@ -1106,23 +1153,33 @@ class GameController {
                 }
             }
             
-            // Gérer spécifiquement le cas de l'abandon contre l'IA
-            if ($gameInfo['player2_id'] == 0 && $winner_id == 0) {
-                // Le joueur abandonne contre l'IA, donc le perdant est le joueur
-                $winner_id = null; // Nous utilisons null car l'IA n'a pas d'ID valide
-                $loser_id = $gameInfo['player1_id'];
-                error_log("endGame: Cas d'abandon contre l'IA détecté, le perdant est player1_id: {$loser_id}");
+            // Cas spécial: le joueur abandonne contre l'IA
+            if ($gameInfo['player2_id'] == 0) {
+                // Si c'est une partie contre l'IA
+                if ($winner_id == 0) {
+                    // L'IA est marquée comme gagnante, donc le joueur humain a abandonné
+                    $loser_id = $gameInfo['player1_id'];
+                    error_log("endGame: Cas spécial - Abandon contre l'IA par le joueur {$loser_id}");
+                } else if ($winner_id === null && $loser_id !== null) {
+                    // Le joueur est indiqué explicitement comme perdant
+                    $winner_id = 0; // L'IA gagne
+                    error_log("endGame: Cas spécial - Joueur {$loser_id} a perdu contre l'IA");
+                }
             }
             
-            // Mettre à jour le statut de la partie
+            // Mettre à jour le statut de la partie - valeur par défaut pour winner_id
+            $finalWinnerId = $winner_id; // Peut être null si match nul
+            $status = 'finished';
+            
             $updateQuery = "UPDATE games SET 
-                     status = 'finished', 
+                     status = :status, 
                      winner_id = :winner_id,
                      updated_at = NOW()
                      WHERE id = :game_id";
             
             $updateStmt = $this->db->prepare($updateQuery);
-            $updateStmt->bindParam(':winner_id', $winner_id);
+            $updateStmt->bindParam(':status', $status);
+            $updateStmt->bindParam(':winner_id', $finalWinnerId);
             $updateStmt->bindParam(':game_id', $game_id);
             
             if (!$updateStmt->execute()) {
@@ -1131,22 +1188,31 @@ class GameController {
                 return false;
             }
             
-            error_log("endGame: Statut de la partie mis à jour avec succès, statut: 'finished', winner_id: " . ($winner_id ?? 'null') . ", isDrawGame: " . ($isDrawGame ? 'true' : 'false'));
+            error_log("endGame: Statut de la partie mis à jour avec succès, statut: '{$status}', winner_id: " . ($finalWinnerId ?? 'null') . ", isDrawGame: " . ($isDrawGame ? 'true' : 'false'));
             
             // Mettre à jour les statistiques manuellement (en plus du trigger)
             $player1_id = $gameInfo['player1_id'];
             $player2_id = $gameInfo['player2_id'];
             
+            // Créer des notifications pour les joueurs
+            $this->createGameCompletionNotifications($game_id, $player1_id, $player2_id, $winner_id, $isDrawGame);
+            
             // Cas spécial d'abandon contre un bot
-            if ($loser_id !== null && $player2_id == 0) {
-                error_log("endGame: Cas spécial d'abandon contre bot confirmé. Joueur perdant ID: " . $loser_id);
-                // Le joueur a perdu contre le bot
-                $this->updatePlayerStats($loser_id, false);
+            if ($player2_id == 0) {
+                if ($winner_id == 0 || $loser_id !== null) {
+                    error_log("endGame: Mise à jour des stats pour le joueur qui a perdu contre l'IA: " . ($loser_id ?? $player1_id));
+                    // Le joueur a perdu contre le bot
+                    $this->updatePlayerStats($loser_id ?? $player1_id, false);
+                } else if ($winner_id == $player1_id) {
+                    // Le joueur humain a gagné contre l'IA
+                    error_log("endGame: Mise à jour des stats pour le joueur qui a gagné contre l'IA: {$player1_id}");
+                    $this->updatePlayerStats($player1_id, true);
+                }
                 
                 // Valider la transaction
                 $this->db->commit();
                 
-                error_log("Partie terminée avec succès (abandon contre bot). ID: " . $game_id . ", Perdant: " . $loser_id);
+                error_log("Partie contre l'IA terminée avec succès. ID: " . $game_id);
                 return true;
             }
             
@@ -1187,6 +1253,92 @@ class GameController {
             }
             
             error_log("Erreur dans endGame: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Crée des notifications pour les joueurs lorsqu'une partie est terminée
+     * 
+     * @param int $game_id ID de la partie
+     * @param int $player1_id ID du joueur 1
+     * @param int $player2_id ID du joueur 2
+     * @param int|null $winner_id ID du joueur gagnant (null si match nul)
+     * @param bool $isDrawGame True si le match est nul
+     * @return bool Succès de l'opération
+     */
+    private function createGameCompletionNotifications($game_id, $player1_id, $player2_id, $winner_id, $isDrawGame) {
+        try {
+            // Charger le contrôleur de notifications si nécessaire
+            require_once __DIR__ . '/NotificationController.php';
+            $notificationController = new NotificationController();
+            
+            // Récupérer les noms des joueurs
+            $stmt = $this->db->prepare("SELECT id, username FROM users WHERE id IN (?, ?)");
+            $stmt->execute([$player1_id, $player2_id == 0 ? $player1_id : $player2_id]);
+            $players = [];
+            
+            while ($player = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $players[$player['id']] = $player['username'];
+            }
+            
+            // Message spécifique pour le joueur 1
+            if ($isDrawGame) {
+                // Match nul
+                $message1 = "Votre partie contre " . ($player2_id == 0 ? "l'IA" : $players[$player2_id]) . " s'est terminée par un match nul.";
+            } else if ($winner_id == $player1_id) {
+                // Joueur 1 a gagné
+                $message1 = "Vous avez gagné votre partie contre " . ($player2_id == 0 ? "l'IA" : $players[$player2_id]) . " !";
+            } else {
+                // Joueur 1 a perdu
+                $message1 = "Vous avez perdu votre partie contre " . ($player2_id == 0 ? "l'IA" : $players[$player2_id]) . ".";
+            }
+            
+            // Créer la notification pour le joueur 1
+            $data1 = [
+                'game_id' => $game_id,
+                'opponent_id' => $player2_id,
+                'result' => $isDrawGame ? 'draw' : ($winner_id == $player1_id ? 'win' : 'loss')
+            ];
+            
+            $notificationController->createNotification(
+                $player1_id,
+                'game_completed',
+                $message1,
+                $data1
+            );
+            
+            // Si le joueur 2 n'est pas un bot, créer une notification pour lui aussi
+            if ($player2_id != 0) {
+                if ($isDrawGame) {
+                    // Match nul
+                    $message2 = "Votre partie contre " . $players[$player1_id] . " s'est terminée par un match nul.";
+                } else if ($winner_id == $player2_id) {
+                    // Joueur 2 a gagné
+                    $message2 = "Vous avez gagné votre partie contre " . $players[$player1_id] . " !";
+                } else {
+                    // Joueur 2 a perdu
+                    $message2 = "Vous avez perdu votre partie contre " . $players[$player1_id] . ".";
+                }
+                
+                // Créer la notification pour le joueur 2
+                $data2 = [
+                    'game_id' => $game_id,
+                    'opponent_id' => $player1_id,
+                    'result' => $isDrawGame ? 'draw' : ($winner_id == $player2_id ? 'win' : 'loss')
+                ];
+                
+                $notificationController->createNotification(
+                    $player2_id,
+                    'game_completed',
+                    $message2,
+                    $data2
+                );
+            }
+            
+            return true;
+        } catch (Exception $e) {
+            error_log("Erreur lors de la création des notifications de fin de partie: " . $e->getMessage());
             return false;
         }
     }
@@ -1321,19 +1473,19 @@ class GameController {
      */
     public function recordMove($game_id, $user_id, $fromRow, $fromCol, $toRow, $toCol, $captured) {
         try {
-            $query = "INSERT INTO moves (game_id, user_id, from_position, to_position, captured, move_time) 
-                      VALUES (:game_id, :user_id, :from_position, :to_position, :captured, NOW())";
+            $query = "INSERT INTO moves (game_id, user_id, from_row, from_col, to_row, to_col, captured) 
+                      VALUES (:game_id, :user_id, :from_row, :from_col, :to_row, :to_col, :captured)";
             
             $stmt = $this->db->prepare($query);
             
-            $from_position = $fromRow . ',' . $fromCol;
-            $to_position = $toRow . ',' . $toCol;
             $captured_val = $captured ? 1 : 0;
             
             $stmt->bindParam(':game_id', $game_id);
             $stmt->bindParam(':user_id', $user_id);
-            $stmt->bindParam(':from_position', $from_position);
-            $stmt->bindParam(':to_position', $to_position);
+            $stmt->bindParam(':from_row', $fromRow);
+            $stmt->bindParam(':from_col', $fromCol);
+            $stmt->bindParam(':to_row', $toRow);
+            $stmt->bindParam(':to_col', $toCol);
             $stmt->bindParam(':captured', $captured_val);
             
             return $stmt->execute();
@@ -1602,6 +1754,276 @@ class GameController {
             return [
                 'success' => false,
                 'message' => 'Erreur lors du mouvement du bot: ' . $e->getMessage()
+            ];
+        }
+    }
+    
+    /**
+     * Récupère toutes les parties d'un joueur avec pagination
+     * @param int $userId ID du joueur
+     * @param int $limit Nombre de parties à récupérer
+     * @param int $offset Offset pour la pagination
+     * @return array Liste des parties
+     */
+    public function getUserGames($userId, $limit, $offset) {
+        try {
+            // Log pour débogage
+            error_log("getUserGames appelé pour l'utilisateur ID: " . $userId . ", limit: " . $limit . ", offset: " . $offset);
+            
+            // Convertir en entiers pour s'assurer que les types sont corrects
+            $userId = (int)$userId;
+            $limit = (int)$limit;
+            $offset = (int)$offset;
+            
+            $query = "SELECT g.*, 
+                      u1.username as player1_username, 
+                      u2.username as player2_username 
+                      FROM games g
+                      LEFT JOIN users u1 ON g.player1_id = u1.id
+                      LEFT JOIN users u2 ON g.player2_id = u2.id
+                      WHERE (g.player1_id = ? OR g.player2_id = ?) 
+                      ORDER BY g.updated_at DESC
+                      LIMIT ?, ?";
+            
+            $stmt = $this->db->prepare($query);
+            // Utiliser bindValue avec les indices de paramètres plutôt que bindParam avec des noms
+            $stmt->bindValue(1, $userId, PDO::PARAM_INT);
+            $stmt->bindValue(2, $userId, PDO::PARAM_INT);
+            $stmt->bindValue(3, $offset, PDO::PARAM_INT);
+            $stmt->bindValue(4, $limit, PDO::PARAM_INT);
+            $stmt->execute();
+            
+            $games = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            // Log du nombre de parties trouvées
+            error_log("Nombre de parties trouvées pour l'utilisateur " . $userId . ": " . count($games));
+            
+            // Ajouter le résultat à chaque partie du point de vue de l'utilisateur
+            foreach ($games as &$game) {
+                // Par défaut, le résultat est non défini
+                $game['result'] = null;
+                
+                // Log des détails de la partie
+                error_log("Traitement de la partie ID: " . $game['id'] . ", status: " . $game['status'] . ", winner_id: " . ($game['winner_id'] ?? 'null'));
+                
+                // Note: Certaines bases de données pourraient avoir un traitement différent des valeurs NULL vs empty string
+                // Normalisons le statut pour éviter des problèmes
+                if ($game['status'] === null || $game['status'] === '') {
+                    $game['status'] = 'unknown';
+                    error_log("Status NULL ou vide trouvé pour la partie ID: " . $game['id'] . ", normalisé en 'unknown'");
+                }
+                
+                // Si la partie est terminée, déterminer le résultat
+                // Vérifions différentes variantes de 'terminé' au cas où
+                if ($game['status'] === 'finished' || $game['status'] === 'completed' || $game['status'] === 'ended') {
+                    // Match nul ou abandon (winner_id = null ou winner_id = 0)
+                    if ($game['winner_id'] === null || $game['winner_id'] == 0) {
+                        $game['result'] = 'draw';
+                        error_log("Partie ID: " . $game['id'] . " classée comme match nul/abandon");
+                    } 
+                    // Partie gagnée par l'utilisateur
+                    else if ($game['winner_id'] == $userId) {
+                        $game['result'] = 'win';
+                        error_log("Partie ID: " . $game['id'] . " classée comme victoire pour l'utilisateur");
+                    } 
+                    // Partie perdue par l'utilisateur
+                    else {
+                        $game['result'] = 'loss';
+                        error_log("Partie ID: " . $game['id'] . " classée comme défaite pour l'utilisateur");
+                    }
+                } else {
+                    error_log("Partie ID: " . $game['id'] . " n'est pas terminée, status: " . $game['status']);
+                }
+            }
+            
+            error_log("Retour des parties avec leurs résultats assignés");
+            return $games;
+        } catch (PDOException $e) {
+            error_log('Erreur lors de la récupération des parties: ' . $e->getMessage());
+            return [];
+        }
+    }
+    
+    /**
+     * Compte le nombre total de parties d'un joueur
+     * @param int $userId ID du joueur
+     * @return int Nombre total de parties
+     */
+    public function countUserGames($userId) {
+        try {
+            // Log pour débogage
+            error_log("countUserGames appelé pour l'utilisateur ID: " . $userId);
+            
+            // Convertir en entier pour s'assurer que le type est correct
+            $userId = (int)$userId;
+            
+            $query = "SELECT COUNT(*) FROM games WHERE player1_id = ? OR player2_id = ?";
+            $stmt = $this->db->prepare($query);
+            $stmt->bindValue(1, $userId, PDO::PARAM_INT);
+            $stmt->bindValue(2, $userId, PDO::PARAM_INT);
+            $stmt->execute();
+            
+            $count = $stmt->fetchColumn();
+            
+            // Log le résultat
+            error_log("countUserGames: Nombre de parties trouvées: " . $count);
+            
+            return $count;
+        } catch (PDOException $e) {
+            error_log('Erreur lors du comptage des parties: ' . $e->getMessage());
+            return 0;
+        }
+    }
+    
+    /**
+     * Récupère les meilleurs joueurs pour le classement
+     * @param int $limit Nombre de joueurs à récupérer
+     * @param int $offset À partir de quel joueur commencer (pour la pagination)
+     * @return array Liste des joueurs et leurs statistiques
+     */
+    public function getTopPlayers($limit, $offset) {
+        try {
+            // D'abord, vérifier si la table leaderboard existe
+            $checkTable = "SELECT COUNT(*) as count FROM information_schema.tables 
+                         WHERE table_schema = DATABASE() 
+                         AND table_name = 'leaderboard'";
+            $checkStmt = $this->db->prepare($checkTable);
+            $checkStmt->execute();
+            $tableExists = ($checkStmt->fetch(PDO::FETCH_ASSOC)['count'] > 0);
+            
+            if ($tableExists) {
+                // Si la table leaderboard existe, utiliser celle-ci
+                $query = "SELECT l.user_id as id, u.username, l.games_played, l.games_won, l.games_lost, 
+                          l.win_percentage, l.rank_position as rank
+                          FROM leaderboard l
+                          JOIN users u ON l.user_id = u.id
+                          WHERE l.games_played > 0
+                          ORDER BY l.win_percentage DESC, l.games_played DESC
+                          LIMIT :limit OFFSET :offset";
+            } else {
+                // Sinon, utiliser la table stats
+                $query = "SELECT s.user_id as id, u.username, s.games_played, s.games_won, s.games_lost, 
+                          CASE 
+                              WHEN s.games_played > 0 THEN ROUND((s.games_won / s.games_played) * 100, 1) 
+                              ELSE 0 
+                          END as win_percentage
+                          FROM stats s
+                          JOIN users u ON s.user_id = u.id
+                          WHERE s.games_played > 0
+                          ORDER BY win_percentage DESC, s.games_played DESC
+                          LIMIT :limit OFFSET :offset";
+            }
+            
+            $stmt = $this->db->prepare($query);
+            $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindParam(':offset', $offset, PDO::PARAM_INT);
+            $stmt->execute();
+            
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log('Erreur lors de la récupération des meilleurs joueurs: ' . $e->getMessage());
+            return [];
+        }
+    }
+    
+    /**
+     * Compte le nombre de joueurs actifs (ceux qui ont joué au moins une partie)
+     * @return int Nombre de joueurs actifs
+     */
+    public function countActivePlayers() {
+        try {
+            // D'abord, vérifier si la table leaderboard existe
+            $checkTable = "SELECT COUNT(*) as count FROM information_schema.tables 
+                         WHERE table_schema = DATABASE() 
+                         AND table_name = 'leaderboard'";
+            $checkStmt = $this->db->prepare($checkTable);
+            $checkStmt->execute();
+            $tableExists = ($checkStmt->fetch(PDO::FETCH_ASSOC)['count'] > 0);
+            
+            if ($tableExists) {
+                $query = "SELECT COUNT(*) as count 
+                        FROM leaderboard 
+                        WHERE games_played > 0";
+                        } else {
+                $query = "SELECT COUNT(*) as count 
+                        FROM stats
+                        WHERE games_played > 0";
+            }
+            
+            $stmt = $this->db->prepare($query);
+            $stmt->execute();
+            
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            return $result['count'];
+        } catch (PDOException $e) {
+            error_log('Erreur lors du comptage des joueurs actifs: ' . $e->getMessage());
+            return 0;
+        }
+    }
+    
+    /**
+     * Récupère le rang d'un joueur spécifique
+     * @param int $userId ID du joueur
+     * @return array Informations sur le rang du joueur
+     */
+    public function getPlayerRank($userId) {
+        try {
+            // D'abord, vérifier si la table leaderboard existe
+            $checkTable = "SELECT COUNT(*) as count FROM information_schema.tables 
+                         WHERE table_schema = DATABASE() 
+                         AND table_name = 'leaderboard'";
+            $checkStmt = $this->db->prepare($checkTable);
+            $checkStmt->execute();
+            $tableExists = ($checkStmt->fetch(PDO::FETCH_ASSOC)['count'] > 0);
+            
+            if ($tableExists) {
+                $query = "SELECT l.rank_position as rank, l.games_played, l.games_won, l.games_lost, l.win_percentage
+                        FROM leaderboard l
+                        WHERE l.user_id = :user_id";
+                    } else {
+                // Si leaderboard n'existe pas, calculer le rang manuellement
+                $query = "SELECT 
+                            s.games_played, 
+                            s.games_won, 
+                            s.games_lost,
+                            CASE 
+                                WHEN s.games_played > 0 THEN ROUND((s.games_won / s.games_played) * 100, 1) 
+                                ELSE 0 
+                            END as win_percentage,
+                            (SELECT COUNT(*) + 1 FROM stats s2 
+                             WHERE (s2.games_won / s2.games_played) > (s.games_won / s.games_played)
+                             OR ((s2.games_won / s2.games_played) = (s.games_won / s.games_played) AND s2.games_played > s.games_played)
+                             OR ((s2.games_won / s2.games_played) = (s.games_won / s.games_played) AND s2.games_played = s.games_played AND s2.games_won > s.games_won)) as rank
+                        FROM stats s
+                        WHERE s.user_id = :user_id";
+            }
+            
+            $stmt = $this->db->prepare($query);
+            $stmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
+            $stmt->execute();
+            
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Si le joueur n'a pas encore de stats, retourner des valeurs par défaut
+            if (!$result) {
+                return [
+                    'rank' => 0,
+                    'games_played' => 0,
+                    'games_won' => 0,
+                    'games_lost' => 0,
+                    'win_percentage' => 0
+                ];
+            }
+            
+            return $result;
+        } catch (PDOException $e) {
+            error_log('Erreur lors de la récupération du rang du joueur: ' . $e->getMessage());
+            return [
+                'rank' => 0,
+                'games_played' => 0,
+                'games_won' => 0,
+                'games_lost' => 0,
+                'win_percentage' => 0
             ];
         }
     }

@@ -89,7 +89,7 @@ include_once __DIR__ . '/../backend/includes/header.php';
                     <?php else: ?>
                         <div class="list-group">
                         <?php foreach ($notifications as $notification): ?>
-                            <div id="notification-<?php echo htmlspecialchars($notification['id']); ?>" class="list-group-item list-group-item-action <?php echo $notification['is_read'] ? '' : 'list-group-item-light'; ?>">
+                            <div id="notification-<?php echo htmlspecialchars($notification['id']); ?>" class="list-group-item list-group-item-action <?php echo isset($notification['read_status']) && !$notification['read_status'] ? 'list-group-item-light' : ''; ?>">
                                 <div class="d-flex w-100 justify-content-between align-items-center">
                                     <div>
                                         <h5 class="mb-1">
@@ -127,7 +127,7 @@ include_once __DIR__ . '/../backend/includes/header.php';
                                         </p>
                                     </div>
                                     <div class="btn-group">
-                                        <?php if (!$notification['is_read']): ?>
+                                        <?php if (isset($notification['read_status']) && !$notification['read_status']): ?>
                                         <button onclick="markAsRead('<?php echo htmlspecialchars($notification['id']); ?>')" class="btn btn-sm btn-outline-secondary" title="Marquer comme lu">
                                             <i class="fas fa-check"></i>
                                         </button>

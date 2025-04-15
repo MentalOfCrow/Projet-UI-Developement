@@ -14,6 +14,7 @@ ini_set('error_log', __DIR__ . '/../../backend/logs/php_errors.log');
 
 require_once __DIR__ . '/../../backend/includes/config.php';
 require_once __DIR__ . '/../../backend/controllers/GameController.php';
+require_once __DIR__ . '/../../backend/controllers/ProfileController.php';
 require_once __DIR__ . '/../../backend/includes/session.php';
 
 // Rediriger si l'utilisateur n'est pas connecté
@@ -24,6 +25,13 @@ if (!Session::isLoggedIn()) {
     header('Location: /auth/login.php');
     exit;
 }
+
+// Récupérer l'ID de l'utilisateur
+$user_id = Session::getUserId();
+
+// Mettre à jour l'activité de l'utilisateur
+$profileController = new ProfileController();
+$profileController->updateActivity();
 
 // Récupérer l'ID de la partie depuis l'URL
 $game_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
@@ -39,8 +47,22 @@ if (!$game_id) {
 }
 
 // Récupérer les données de la partie
-$gameController = new GameController();
-$gameData = $gameController->getGame($game_id);
+error_log("board.php - Avant création du GameController");
+try {
+    $gameController = new GameController();
+    error_log("board.php - GameController créé avec succès");
+    
+    error_log("board.php - Avant appel à getGame() avec ID: " . $game_id);
+    $gameData = $gameController->getGame($game_id);
+    error_log("board.php - Après appel à getGame() - Résultat success: " . ($gameData['success'] ? 'true' : 'false'));
+} catch (Exception $e) {
+    error_log("board.php - ERREUR lors de l'utilisation de GameController: " . $e->getMessage());
+    error_log("board.php - Trace: " . $e->getTraceAsString());
+    // Nettoyer le buffer avant de rediriger
+    ob_end_clean();
+    header('Location: /game/play.php?error=' . urlencode('Erreur lors du chargement de la partie: ' . $e->getMessage()));
+    exit;
+}
 
 error_log("Résultat de getGame pour l'ID " . $game_id . ": " . json_encode($gameData));
 
@@ -103,7 +125,7 @@ $pageTitle = "Partie #" . $game_id . " - " . APP_NAME;
                                 <div class="w-6 h-6 rounded-full bg-black border-2 border-white"></div>
                             </div>
                             <span class="font-medium <?php echo $isPlayer1 ? 'text-indigo-700' : 'text-gray-700'; ?>">
-                                <?php echo htmlspecialchars($gameData['game']['player1_name']); ?>
+                                <?php echo htmlspecialchars($gameData['game']['player1_name'] ?? ''); ?>
                             </span>
                             <span class="ml-2 px-2 py-1 text-xs rounded bg-indigo-100 text-indigo-800">
                                 Joueur 1
@@ -115,7 +137,7 @@ $pageTitle = "Partie #" . $game_id . " - " . APP_NAME;
                                 <div class="w-6 h-6 rounded-full bg-white border-2 border-gray-300"></div>
                             </div>
                             <span class="font-medium <?php echo !$isPlayer1 ? 'text-indigo-700' : 'text-gray-700'; ?>">
-                                <?php echo htmlspecialchars($gameData['game']['player2_name']); ?>
+                                <?php echo htmlspecialchars($gameData['game']['player2_name'] ?? ''); ?>
                             </span>
                             <span class="ml-2 px-2 py-1 text-xs rounded bg-indigo-100 text-indigo-800">
                                 <?php echo $opponentIsBot ? 'IA' : 'Joueur 2'; ?>
@@ -145,7 +167,7 @@ $pageTitle = "Partie #" . $game_id . " - " . APP_NAME;
                         Retour à mes parties
                     </a>
                     
-                    <button id="abandonBtn" class="block w-full text-center py-3 px-4 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition duration-200">
+                    <button id="abandonBtn" class="w-full bg-red-600 text-white py-2 px-4 rounded hover:bg-red-700 transition duration-200 mb-2" onclick="abandonGame()">
                         Abandonner la partie
                     </button>
                 </div>
@@ -228,6 +250,7 @@ $pageTitle = "Partie #" . $game_id . " - " . APP_NAME;
     <div class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
         <h3 class="text-xl font-bold text-red-600 mb-4">Abandonner la partie</h3>
         <p class="text-gray-700 mb-6">Êtes-vous sûr de vouloir abandonner cette partie ? Cette action est irréversible et vous serez considéré comme perdant.</p>
+        <div id="abandonMessage" class="text-center mb-4 font-semibold"></div>
         <div class="flex justify-end space-x-4">
             <button id="cancelAbandon" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition">Annuler</button>
             <button id="confirmAbandon" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition">Abandonner</button>
@@ -682,14 +705,13 @@ document.addEventListener('DOMContentLoaded', function() {
         document.body.appendChild(loadingIndicator);
         
         // Appeler l'API pour abandonner la partie
-        fetch('/api/game/move.php', {
+        fetch('/api/game/abandon.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                game_id: game_id,
-                resign: true
+                game_id: game_id
             })
         })
         .then(response => response.json())
@@ -775,6 +797,13 @@ document.addEventListener('DOMContentLoaded', function() {
         gameOverModal.classList.remove('hidden');
     }
 });
+
+// Fonction pour abandonner la partie via le bouton Abandonner
+function abandonGame() {
+    // Ouvrir le modal d'abandon
+    const abandonModal = document.getElementById('abandonModal');
+    abandonModal.classList.remove('hidden');
+}
 </script>
 
 <style>

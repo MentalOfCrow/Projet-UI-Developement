@@ -141,21 +141,21 @@ try {
     error_log("abandon.php - Appel à endGame: game_id=" . $game_id . ", winner_id=" . $winner_id . ", loser_id=" . $loser_id);
     
     // Essayer d'abandonner la partie
-    $result = $gameController->endGame($game_id, $winner_id, $loser_id);
-    error_log("abandon.php - Résultat de l'abandon : " . ($result ? 'succès' : 'échec'));
-    
+        $result = $gameController->endGame($game_id, $winner_id, $loser_id);
+        error_log("abandon.php - Résultat de l'abandon : " . ($result ? 'succès' : 'échec'));
+        
     // Vérification supplémentaire: si endGame échoue, mettre à jour directement la base de données
     if (!$result) {
         error_log("abandon.php - Échec de endGame, tentative de mise à jour directe");
         
         try {
-            $db = Database::getInstance()->getConnection();
-            $updateQuery = "UPDATE games SET status = 'finished', winner_id = :winner_id, updated_at = NOW() WHERE id = :game_id";
-            $stmt = $db->prepare($updateQuery);
-            $stmt->bindParam(':game_id', $game_id, PDO::PARAM_INT);
-            $stmt->bindParam(':winner_id', $winner_id, PDO::PARAM_INT);
-            $success = $stmt->execute();
-            
+        $db = Database::getInstance()->getConnection();
+        $updateQuery = "UPDATE games SET status = 'finished', winner_id = :winner_id, updated_at = NOW() WHERE id = :game_id";
+        $stmt = $db->prepare($updateQuery);
+        $stmt->bindParam(':game_id', $game_id, PDO::PARAM_INT);
+        $stmt->bindParam(':winner_id', $winner_id, PDO::PARAM_INT);
+        $success = $stmt->execute();
+        
             error_log("abandon.php - Mise à jour directe: " . ($success ? 'succès' : 'échec'));
             
             if (!$success) {
@@ -171,12 +171,12 @@ try {
             }
         } catch (Exception $e) {
             error_log("abandon.php - Erreur lors de la mise à jour directe: " . $e->getMessage());
-            
-            // Nettoyer le tampon avant de répondre
-            ob_end_clean();
-            
-            header('Content-Type: application/json');
-            echo json_encode([
+        
+        // Nettoyer le tampon avant de répondre
+        ob_end_clean();
+        
+        header('Content-Type: application/json');
+        echo json_encode([
                 'success' => false,
                 'message' => 'Erreur lors de l\'abandon de la partie: ' . $e->getMessage()
             ]);
@@ -191,7 +191,7 @@ try {
     echo json_encode([
         'success' => true,
         'message' => 'Vous avez abandonné la partie.'
-    ]);
+        ]);
     
 } catch (Exception $e) {
     // En cas d'erreur, retourner un message d'erreur détaillé

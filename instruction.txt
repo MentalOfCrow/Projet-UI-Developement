@@ -154,6 +154,7 @@ C'EST PARTI !
    - Messages comme "X vous a envoyé une demande d'ami"
    - Options pour accepter/refuser directement
 
+
 ### Gestion des profils utilisateurs
 1. Personnalisation du profil
    - Pseudo et mot de passe modifiables
@@ -161,7 +162,6 @@ C'EST PARTI !
    - Image par défaut basée sur l'initiale du pseudo
 
 2. Données du profil
-   - Pas d'email requis pour simplifier l'expérience utilisateur
    - Statistiques de jeu affichées (parties jouées, victoires, défaites)
    - Date d'inscription et dernière connexion
 
@@ -169,6 +169,8 @@ C'EST PARTI !
    - Visibilité du profil (public, amis seulement, privé)
    - Qui peut envoyer des demandes d'ami
    - Option pour apparaître hors ligne
+
+
 
 ### Système d'invitation de partie
 1. Inviter un ami à jouer
@@ -251,4 +253,7 @@ Cette approche progressive permettra d'implémenter le système social tout en c
    - Identification des erreurs récurrentes du joueur
    - Recommandations d'exercices ciblés pour améliorer ses points faibles
    - Statistiques sur les types d'ouvertures et de fins de parties préférées
+
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/../../../backend/logs/php_errors.log');
 

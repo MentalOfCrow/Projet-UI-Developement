@@ -7,6 +7,9 @@ require_once __DIR__ . '/../includes/session.php';
  * Gère les opérations liées aux parties de jeu
  */
 class Game {
+    // Constante de table
+    const TABLE = 'games';
+    
     // Propriétés de la base de données
     private $db;
     public $table = "games";
@@ -28,9 +31,14 @@ class Game {
     
     /**
      * Constructeur
+     * @param PDO|null $db Connexion à la base de données (optionnel)
      */
-    public function __construct() {
-        $this->db = Database::getInstance()->getConnection();
+    public function __construct($db = null) {
+        if ($db !== null) {
+            $this->db = $db;
+        } else {
+            $this->db = Database::getInstance()->getConnection();
+        }
     }
     
     /**
@@ -281,17 +289,17 @@ class Game {
                 // Enregistrer le mouvement
                 $captured = $validMove['capture'] ?? false;
                 
-                $query = "INSERT INTO moves (game_id, user_id, from_position, to_position, captured) 
-                         VALUES (:game_id, :user_id, :from_position, :to_position, :captured)";
+                $query = "INSERT INTO moves (game_id, user_id, from_row, from_col, to_row, to_col, captured) 
+                         VALUES (:game_id, :user_id, :from_row, :from_col, :to_row, :to_col, :captured)";
                 
                 $stmt = $this->db->prepare($query);
-                $fromPos = "$fromRow,$fromCol";
-                $toPos = "$toRow,$toCol";
                 
                 $stmt->bindParam(':game_id', $this->id, PDO::PARAM_INT);
                 $stmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
-                $stmt->bindParam(':from_position', $fromPos);
-                $stmt->bindParam(':to_position', $toPos);
+                $stmt->bindParam(':from_row', $fromRow, PDO::PARAM_INT);
+                $stmt->bindParam(':from_col', $fromCol, PDO::PARAM_INT);
+                $stmt->bindParam(':to_row', $toRow, PDO::PARAM_INT);
+                $stmt->bindParam(':to_col', $toCol, PDO::PARAM_INT);
                 $stmt->bindParam(':captured', $captured, PDO::PARAM_BOOL);
                 
                 $stmt->execute();

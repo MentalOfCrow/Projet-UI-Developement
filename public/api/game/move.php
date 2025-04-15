@@ -13,6 +13,7 @@ ini_set('error_log', __DIR__ . '/../../../backend/logs/php_errors.log');
 
 require_once __DIR__ . '/../../../backend/includes/config.php';
 require_once __DIR__ . '/../../../backend/controllers/GameController.php';
+require_once __DIR__ . '/../../../backend/controllers/ProfileController.php';
 require_once __DIR__ . '/../../../backend/includes/session.php';
 
 // Vérifier si l'utilisateur est connecté
@@ -30,6 +31,10 @@ if (!Session::isLoggedIn()) {
 
 // Récupérer l'ID de l'utilisateur
 $user_id = Session::getUserId();
+
+// Mettre à jour l'activité de l'utilisateur
+$profileController = new ProfileController();
+$profileController->updateActivity();
 
 // Vérifier si la requête est de type POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -55,14 +60,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     $game_id = intval($data['game_id']);
-    $gameController = new GameController();
+    
+    error_log("move.php - Avant création du GameController");
+    try {
+        $gameController = new GameController();
+        error_log("move.php - GameController créé avec succès");
+    } catch (Exception $e) {
+        error_log("move.php - ERREUR lors de la création du GameController: " . $e->getMessage());
+        error_log("move.php - Trace: " . $e->getTraceAsString());
+        
+        // Nettoyer le tampon avant de répondre
+        ob_end_clean();
+        
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => false,
+            'message' => 'Erreur interne du serveur: ' . $e->getMessage()
+        ]);
+        exit;
+    }
     
     // Vérifier si c'est une action d'abandon
     if (isset($data['resign']) && $data['resign'] === true) {
         error_log("Action d'abandon détectée pour la partie " . $game_id);
         
         // Récupérer les détails de la partie
+        error_log("move.php - Avant appel à getGame() pour la partie " . $game_id);
         $gameResult = $gameController->getGame($game_id);
+        error_log("move.php - Après appel à getGame() - Résultat success: " . ($gameResult['success'] ? 'true' : 'false'));
         if (!$gameResult['success']) {
             // Nettoyer le tampon avant de répondre
             ob_end_clean();
@@ -80,26 +105,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Déterminer le gagnant (l'adversaire du joueur qui abandonne)
         $winner_id = ($user_id == $game['player1_id']) ? $game['player2_id'] : $game['player1_id'];
         
-        // Si l'adversaire est un bot (player2_id = 0), définir le gagnant correctement
-        // Dans le cas d'un abandon contre un bot, nous considérons que le bot a gagné
-        // mais nous devons utiliser un ID valide pour mettre à jour les statistiques
-        if ($winner_id == 0) {
-            // Dans ce cas, nous allons utiliser un ID spécial: le joueur qui abandonne est perdant
-            // mais le gagnant est techniquement l'IA (player2_id=0)
-            // Nous utilisons NULL pour indiquer que personne n'a vraiment gagné (= défaite du joueur)
-            if ($game['player2_id'] == 0) {
-                // Le bot est player2, donc c'est player1 qui abandonne
-                // Le gagnant est null, mais on mettra à jour les stats dans endGame
-                $specialCase = true;
-                error_log("Abandon contre bot: le joueur " . $user_id . " a abandonné contre l'IA");
-            }
+        // Si l'adversaire est un bot (player2_id = 0)
+        if ($game['player2_id'] == 0) {
+            error_log("Abandon contre bot détecté: joueur " . $user_id . " abandonne contre l'IA");
+            // Dans le cas d'un abandon contre un bot, l'IA gagne
+            $winner_id = 0;
         }
         
-        // Mettre fin à la partie
-        $result = $gameController->endGame($game_id, $winner_id, isset($specialCase) ? $user_id : null);
+        // Appel à endGame avec le loser_id explicite pour les parties contre l'IA
+        $loser_id = ($game['player2_id'] == 0) ? $user_id : null;
+        $result = $gameController->endGame($game_id, $winner_id, $loser_id);
         
         // Log détaillé du résultat de l'abandon pour débogage
-        error_log("Résultat de l'abandon : " . json_encode($result));
+        error_log("Résultat de l'abandon : " . ($result ? 'succès' : 'échec'));
         
         // Nettoyer le tampon avant de répondre
         ob_end_clean();
@@ -133,7 +151,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $to_col = intval($data['to_col']);
     
     // Récupérer les détails de la partie
+    error_log("move.php - Avant appel à getGame() pour vérifier le tour (partie ID: " . $game_id . ")");
     $gameResult = $gameController->getGame($game_id);
+    error_log("move.php - Après appel à getGame() - Résultat success: " . ($gameResult['success'] ? 'true' : 'false'));
+    
     if (!$gameResult['success']) {
         // Nettoyer le tampon avant de répondre
         ob_end_clean();
@@ -166,7 +187,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     // Effectuer le mouvement
+    error_log("move.php - Avant appel à makeMove() - Déplacement de [$from_row,$from_col] vers [$to_row,$to_col] pour joueur $player_number");
     $moveResult = $gameController->makeMove($game_id, $from_row, $from_col, $to_row, $to_col, $player_number);
+    error_log("move.php - Après appel à makeMove() - Résultat success: " . ($moveResult['success'] ? 'true' : 'false'));
     
     // Log du résultat pour débogage
     error_log("Résultat du mouvement: " . json_encode($moveResult));

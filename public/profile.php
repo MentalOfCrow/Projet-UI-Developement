@@ -1,5 +1,8 @@
 <?php
-// Activer l'affichage des erreurs en développement
+// Start output buffering to prevent any output before headers are sent
+ob_start();
+
+// Enable error display in development
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
@@ -9,200 +12,638 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Charger les classes nécessaires
+// Include required files
 require_once __DIR__ . '/../backend/includes/config.php';
 require_once __DIR__ . '/../backend/includes/session.php';
 require_once __DIR__ . '/../backend/db/Database.php';
+require_once __DIR__ . '/../backend/controllers/ProfileController.php';
+require_once __DIR__ . '/../backend/controllers/FriendController.php';
+require_once __DIR__ . '/../backend/controllers/NotificationController.php';
+require_once __DIR__ . '/../backend/controllers/GameController.php';
 
-// Vérifier si l'utilisateur est connecté
-if (!Session::isLoggedIn()) {
-    // Rediriger vers la page de connexion
-    header('Location: /auth/login.php');
+// Get user ID from URL or use logged-in user's ID
+$profileUserId = isset($_GET['id']) ? intval($_GET['id']) : (Session::isLoggedIn() ? Session::getUserId() : null);
+
+// If no valid user ID is found, redirect to homepage
+if (!$profileUserId) {
+    header('Location: /index.php');
     exit;
 }
 
-// Récupérer les informations de l'utilisateur
-$userId = Session::getUserId();
-$username = Session::getUsername();
+// Get logged-in user's ID (if logged in)
+$currentUserId = Session::isLoggedIn() ? Session::getUserId() : null;
+$isOwnProfile = $currentUserId && $currentUserId === $profileUserId;
 
-// Récupérer les informations d'email et date d'inscription depuis la base de données
+// Create instance of ProfileController
+$profileController = new ProfileController();
+
+// Try to get the profile data
 try {
-    // Utiliser getInstance() au lieu de new Database()
-    $db = Database::getInstance();
-    $conn = $db->getConnection();
+    $profileData = $profileController->getProfile($profileUserId);
     
-    // Requête pour les informations utilisateur
-    $userQuery = "SELECT email, created_at FROM users WHERE id = :user_id";
-    $userStmt = $conn->prepare($userQuery);
-    $userStmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
-    $userStmt->execute();
+    // If profile not found
+    if (!$profileData) {
+        $error = "Ce profil n'est pas disponible.";
+    } 
+    // If profile is private and not the owner
+    else if (isset($profileData['privacy_level']) && $profileData['privacy_level'] === 'private' && !$isOwnProfile) {
+        $error = "Ce profil est privé.";
+    }
+    else {
+        $username = $profileData['username'] ?? 'Utilisateur inconnu';
+        $email = $isOwnProfile ? ($profileData['email'] ?? '') : '';
+        $memberSince = isset($profileData['created_at']) ? date('d/m/Y', strtotime($profileData['created_at'])) : 'Date inconnue';
+        $privacyLevel = $profileData['privacy_level'] ?? 'friends';
+        
+        // Update user activity if they're logged in
+        if ($currentUserId) {
+            $profileController->updateActivity();
+        }
+    }
     
-    $userData = $userStmt->fetch(PDO::FETCH_ASSOC);
-    
-    $email = $userData['email'] ?? '';
-    $memberSince = $userData['created_at'] ?? date('Y-m-d');
-    
-    // Formater la date d'inscription
-    $memberSinceFormatted = date('d/m/Y', strtotime($memberSince));
-    
-    // Requête pour les statistiques
-    $statsQuery = "SELECT 
-        COUNT(*) as total_games,
-        SUM(CASE WHEN winner_id = :user_id THEN 1 ELSE 0 END) as victories
-        FROM games
-        WHERE (player1_id = :user_id OR player2_id = :user_id) 
-        AND status = 'completed'";
-    
-    $statsStmt = $conn->prepare($statsQuery);
-    $statsStmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
-    $statsStmt->execute();
-    
+    // Récupération des statistiques de jeu depuis la table stats
+    $db = Database::getInstance()->getConnection();
+    $statsQuery = "SELECT games_played as total_games, games_won as victories, games_lost as defeats FROM stats WHERE user_id = ?";
+    $statsStmt = $db->prepare($statsQuery);
+    $statsStmt->execute([$profileUserId]);
     $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
     
     $totalGames = $stats['total_games'] ?? 0;
     $victories = $stats['victories'] ?? 0;
+    $defeats = $stats['defeats'] ?? 0;
     $winRate = $totalGames > 0 ? round(($victories / $totalGames) * 100) : 0;
     
-    // Requête pour les parties récentes
-    $recentGamesQuery = "SELECT g.id, g.created_at, g.status, g.winner_id,
-        u1.username as player1_name, u2.username as player2_name
-        FROM games g
-        JOIN users u1 ON g.player1_id = u1.id
-        JOIN users u2 ON g.player2_id = u2.id
-        WHERE (g.player1_id = :user_id OR g.player2_id = :user_id)
-        ORDER BY g.created_at DESC LIMIT 5";
+    // Get friends based on privacy settings
+    $friendController = new FriendController();
+    $friends = [];
+    if ($isOwnProfile || 
+        (!isset($error) && isset($profileData['privacy_level']) && 
+         ($profileData['privacy_level'] === 'public' || 
+          ($profileData['privacy_level'] === 'friends' && $currentUserId && $friendController->areFriends($currentUserId, $profileUserId))))) {
+        $friendsResult = $friendController->getFriendsList($profileUserId);
+        $friends = $friendsResult['success'] ? ($friendsResult['friends'] ?? []) : [];
+    }
     
-    $recentGamesStmt = $conn->prepare($recentGamesQuery);
-    $recentGamesStmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
-    $recentGamesStmt->execute();
+    // Only get pending requests if this is the user's own profile
+    $pendingRequests = [];
+    if ($isOwnProfile) {
+        $pendingRequestsData = $friendController->getPendingFriendRequests();
+        $pendingRequests = $pendingRequestsData['success'] ? ($pendingRequestsData['received'] ?? []) : [];
+    }
     
-    $recentGames = $recentGamesStmt->fetchAll(PDO::FETCH_ASSOC);
+    // Récupérer le rang du joueur dans le leaderboard
+    $gameController = new GameController();
+    $playerRank = $gameController->getPlayerRank($profileUserId);
+    $rank = $playerRank['rank'] ?? 0;
     
-} catch (PDOException $e) {
-    // En cas d'erreur, définir des valeurs par défaut
-    $email = '';
-    $memberSinceFormatted = date('d/m/Y');
-    $totalGames = 0;
-    $victories = 0;
-    $winRate = 0;
-    $recentGames = [];
-    
-    // Log de l'erreur
-    error_log("Erreur lors de la récupération des données utilisateur: " . $e->getMessage());
+} catch (Exception $e) {
+    $error = "Une erreur s'est produite lors du chargement du profil.";
+    error_log("Error loading profile: " . $e->getMessage());
 }
 
 // Définir le titre de la page
-$pageTitle = "Profil - " . APP_NAME;
+$pageTitle = isset($username) ? "Profil de " . $username : "Profil - " . APP_NAME;
 
 // Inclure l'en-tête
 include __DIR__ . '/../backend/includes/header.php';
 ?>
 
 <div class="container mx-auto px-4 py-8">
+    <?php if (isset($error)): ?>
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+            <span class="block sm:inline"><?php echo htmlspecialchars($error); ?></span>
+        </div>
+    <?php else: ?>
+    
     <div class="profile-container bg-white rounded-lg shadow-md p-6">
-        <div class="profile-header">
-            <div class="profile-avatar">
-                <span><?php echo strtoupper(substr($username, 0, 1)); ?></span>
+        <div class="profile-header flex items-center mb-6">
+            <div class="profile-avatar bg-primary text-white rounded-full w-20 h-20 flex items-center justify-center text-3xl mr-4">
+                <span><?php echo isset($username) ? strtoupper(substr($username, 0, 1)) : '?'; ?></span>
             </div>
             <div class="profile-info">
-                <h1 class="text-2xl font-bold text-gray-800"><?php echo htmlspecialchars($username); ?></h1>
-                <p class="text-gray-600"><?php echo htmlspecialchars($email); ?></p>
-                <p class="text-gray-500 text-sm mt-1">Membre depuis: <?php echo $memberSinceFormatted; ?></p>
+                <h1 class="text-2xl font-bold text-gray-800"><?php echo isset($username) ? htmlspecialchars($username) : 'Utilisateur inconnu'; ?></h1>
+                <?php if ($isOwnProfile && isset($email)): ?>
+                    <p class="text-gray-600"><?php echo htmlspecialchars($email); ?></p>
+                <?php endif; ?>
+                <p class="text-gray-500 text-sm mt-1">Membre depuis: <?php echo isset($memberSince) ? $memberSince : 'Date inconnue'; ?></p>
+                
+                <?php if (!$isOwnProfile && $currentUserId): ?>
+                    <?php 
+                    // Vérifier si ils sont amis
+                    $areFriends = $friendController->areFriends($currentUserId, $profileUserId);
+                    
+                    // Vérifier les demandes d'amis en attente
+                    $pendingRequests = $friendController->getPendingFriendRequests();
+                    $hasSentRequest = false;
+                    $hasReceivedRequest = false;
+                    
+                    if ($pendingRequests['success'] && !empty($pendingRequests['requests'])) {
+                        foreach ($pendingRequests['requests'] as $request) {
+                            if ($request['sender_id'] == $profileUserId) {
+                                $hasReceivedRequest = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Vérifier si l'utilisateur courant a envoyé une demande
+                    $sentRequests = $friendController->getPendingFriendRequests();
+                    if ($sentRequests['success'] && !empty($sentRequests['requests'])) {
+                        foreach ($sentRequests['requests'] as $request) {
+                            if ($request['receiver_id'] == $profileUserId) {
+                                $hasSentRequest = true;
+                                break;
+                            }
+                        }
+                    }
+                    ?>
+                    
+                    <?php if ($areFriends): ?>
+                        <button id="removeFriend" class="mt-2 px-3 py-1 bg-red-500 text-white rounded text-sm" data-id="<?php echo $profileUserId; ?>">Retirer des amis</button>
+                    <?php elseif ($hasSentRequest): ?>
+                        <button class="mt-2 px-3 py-1 bg-gray-300 text-gray-700 rounded text-sm" disabled>Demande envoyée</button>
+                    <?php elseif ($hasReceivedRequest): ?>
+                        <div class="flex mt-2">
+                            <button id="acceptRequest" class="px-3 py-1 bg-green-500 text-white rounded text-sm mr-2" data-id="<?php echo $profileUserId; ?>">Accepter</button>
+                            <button id="rejectRequest" class="px-3 py-1 bg-red-500 text-white rounded text-sm" data-id="<?php echo $profileUserId; ?>">Refuser</button>
+                        </div>
+                    <?php else: ?>
+                        <button id="sendRequest" class="mt-2 px-3 py-1 bg-primary text-white rounded text-sm" data-id="<?php echo $profileUserId; ?>">Ajouter en ami</button>
+                    <?php endif; ?>
+                <?php endif; ?>
             </div>
         </div>
         
-        <div class="profile-stats">
-            <div class="stat-card shadow-sm">
-                <div class="stat-value"><?php echo $totalGames; ?></div>
-                <div class="stat-label">Parties jouées</div>
+        <div class="profile-stats grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <div class="stat-card bg-gray-50 p-4 rounded shadow-sm text-center">
+                <div class="stat-value text-3xl font-bold text-gray-800"><?php echo $totalGames; ?></div>
+                <div class="stat-label text-gray-600">Parties jouées</div>
             </div>
-            <div class="stat-card shadow-sm">
-                <div class="stat-value"><?php echo $victories; ?></div>
-                <div class="stat-label">Victoires</div>
+            <div class="stat-card bg-gray-50 p-4 rounded shadow-sm text-center">
+                <div class="stat-value text-3xl font-bold text-green-600"><?php echo $victories; ?></div>
+                <div class="stat-label text-gray-600">Victoires</div>
             </div>
-            <div class="stat-card shadow-sm">
-                <div class="stat-value"><?php echo $winRate; ?>%</div>
-                <div class="stat-label">Taux de victoire</div>
+            <div class="stat-card bg-gray-50 p-4 rounded shadow-sm text-center">
+                <div class="stat-value text-3xl font-bold text-blue-600"><?php echo $winRate; ?>%</div>
+                <div class="stat-label text-gray-600">Taux de victoire</div>
             </div>
         </div>
         
-        <div class="recent-games mt-8">
-            <h2 class="text-xl font-semibold text-gray-800 mb-4">Parties récentes</h2>
+        <!-- Affichage du rang -->
+        <?php if ($rank > 0): ?>
+        <div class="mt-4 text-center">
+            <span class="inline-block bg-purple-100 text-purple-800 px-4 py-2 rounded-full text-lg font-semibold">
+                Classement: <?php echo $rank; ?><?php echo $rank == 1 ? 'er' : 'ème'; ?>
+            </span>
+            <a href="/leaderboard.php" class="text-purple-600 hover:text-purple-800 ml-3">
+                Voir le classement complet →
+            </a>
+        </div>
+        <?php endif; ?>
+        
+        <?php if ($isOwnProfile): ?>
+        <!-- Profile Settings - Only visible to profile owner -->
+        <div class="profile-settings mb-8">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Paramètres du profil</h2>
             
-            <?php if (empty($recentGames)): ?>
-                <div class="text-center py-8">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                    <p class="text-gray-500">Aucune partie récente à afficher.</p>
-                    <a href="/game/play.php" class="button-primary inline-block mt-4">Commencer une partie</a>
-                </div>
-            <?php else: ?>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full bg-white border border-gray-200 rounded-lg">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adversaire</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Résultat</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-200">
-                            <?php foreach ($recentGames as $game): 
-                                // Déterminer l'adversaire
-                                $opponent = ($game['player1_name'] == $username) ? $game['player2_name'] : $game['player1_name'];
-                                
-                                // Déterminer le résultat
-                                $result = "";
-                                if ($game['status'] == 'completed') {
-                                    if ($game['winner_id'] == $userId) {
-                                        $result = '<span class="text-green-600 font-medium">Victoire</span>';
-                                    } else {
-                                        $result = '<span class="text-red-600 font-medium">Défaite</span>';
-                                    }
-                                } else if ($game['status'] == 'in_progress') {
-                                    $result = '<span class="text-yellow-600 font-medium">En cours</span>';
-                                } else {
-                                    $result = '<span class="text-gray-600">Annulée</span>';
-                                }
-                                
-                                // Formater la date
-                                $gameDate = date('d/m/Y H:i', strtotime($game['created_at']));
-                            ?>
-                                <tr>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><?php echo $gameDate; ?></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"><?php echo htmlspecialchars($opponent); ?></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        <?php 
-                                            $statusText = '';
-                                            switch ($game['status']) {
-                                                case 'in_progress':
-                                                    $statusText = '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">En cours</span>';
-                                                    break;
-                                                case 'completed':
-                                                    $statusText = '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Terminée</span>';
-                                                    break;
-                                                default:
-                                                    $statusText = '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">'.ucfirst($game['status']).'</span>';
-                                            }
-                                            echo $statusText;
-                                        ?>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm"><?php echo $result; ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+            <div class="tabs">
+                <div class="tab-buttons flex border-b mb-4">
+                    <button class="tab-button py-2 px-4 font-medium text-gray-600 border-b-2 border-transparent hover:text-primary hover:border-primary active" data-tab="general">Général</button>
+                    <button class="tab-button py-2 px-4 font-medium text-gray-600 border-b-2 border-transparent hover:text-primary hover:border-primary" data-tab="security">Sécurité</button>
+                    <button class="tab-button py-2 px-4 font-medium text-gray-600 border-b-2 border-transparent hover:text-primary hover:border-primary" data-tab="privacy">Confidentialité</button>
                 </div>
                 
-                <div class="text-center mt-6">
-                    <a href="/game/play.php" class="button-primary">Jouer une nouvelle partie</a>
+                <div class="tab-content" id="general-tab">
+                    <form id="updateProfileForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="username" class="block text-gray-700 mb-1">Nom d'utilisateur</label>
+                            <input type="text" id="username" name="username" class="w-full px-3 py-2 border rounded" value="<?php echo htmlspecialchars($username); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label for="email" class="block text-gray-700 mb-1">Email</label>
+                            <input type="email" id="email" name="email" class="w-full px-3 py-2 border rounded" value="<?php echo htmlspecialchars($email); ?>">
+                        </div>
+                        <div class="col-span-2">
+                            <button type="submit" class="px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark">Mettre à jour</button>
+                        </div>
+                    </form>
+                </div>
+                
+                <div class="tab-content hidden" id="security-tab">
+                    <form id="updatePasswordForm" class="grid grid-cols-1 gap-4">
+                        <div class="form-group">
+                            <label for="current_password" class="block text-gray-700 mb-1">Mot de passe actuel</label>
+                            <input type="password" id="current_password" name="current_password" class="w-full px-3 py-2 border rounded">
+                        </div>
+                        <div class="form-group">
+                            <label for="new_password" class="block text-gray-700 mb-1">Nouveau mot de passe</label>
+                            <input type="password" id="new_password" name="new_password" class="w-full px-3 py-2 border rounded">
+                        </div>
+                        <div class="form-group">
+                            <label for="confirm_password" class="block text-gray-700 mb-1">Confirmer le mot de passe</label>
+                            <input type="password" id="confirm_password" name="confirm_password" class="w-full px-3 py-2 border rounded">
+                        </div>
+                        <div>
+                            <button type="submit" class="px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark">Changer le mot de passe</button>
+                        </div>
+                    </form>
+                </div>
+                
+                <div class="tab-content hidden" id="privacy-tab">
+                    <form id="updatePrivacyForm" class="grid grid-cols-1 gap-4">
+                        <div class="form-group">
+                            <label class="block text-gray-700 mb-2">Niveau de confidentialité du profil</label>
+                            <div class="space-y-2">
+                                <div class="flex items-center">
+                                    <input type="radio" id="privacy_public" name="privacy_level" value="public" class="mr-2" <?php echo (isset($privacyLevel) && $privacyLevel === 'public') ? 'checked' : ''; ?>>
+                                    <label for="privacy_public">Public - Tout le monde peut voir mon profil</label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input type="radio" id="privacy_friends" name="privacy_level" value="friends" class="mr-2" <?php echo (isset($privacyLevel) && $privacyLevel === 'friends') ? 'checked' : ''; ?>>
+                                    <label for="privacy_friends">Amis - Seulement mes amis peuvent voir mon profil</label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input type="radio" id="privacy_private" name="privacy_level" value="private" class="mr-2" <?php echo (isset($privacyLevel) && $privacyLevel === 'private') ? 'checked' : ''; ?>>
+                                    <label for="privacy_private">Privé - Personne ne peut voir mon profil sauf moi</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <button type="submit" class="px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark">Mettre à jour</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+        
+        <!-- Friends list -->
+        <?php if (!empty($friends) || $isOwnProfile): ?>
+        <div class="friends-section mb-8">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Amis (<?php echo count($friends); ?>)</h2>
+            
+            <?php if (empty($friends)): ?>
+                <p class="text-gray-500 italic">Aucun ami à afficher.</p>
+            <?php else: ?>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <?php foreach ($friends as $friend): ?>
+                        <div class="friend-card bg-gray-50 p-4 rounded shadow-sm flex items-center">
+                            <div class="friend-avatar bg-primary text-white rounded-full w-10 h-10 flex items-center justify-center text-lg mr-3">
+                                <span><?php echo strtoupper(substr($friend['username'], 0, 1)); ?></span>
+                            </div>
+                            <div class="friend-info flex-grow">
+                                <a href="/profile.php?id=<?php echo $friend['id']; ?>" class="font-medium text-gray-800 hover:text-primary"><?php echo htmlspecialchars($friend['username']); ?></a>
+                                <p class="text-xs text-gray-500">
+                                    <?php 
+                                    echo $friend['is_online'] ? 
+                                        '<span class="text-green-500">En ligne</span>' : 
+                                        'Dernière activité: ' . date('d/m/Y H:i', strtotime($friend['last_activity'])); 
+                                    ?>
+                                </p>
+                            </div>
+                            <?php if ($isOwnProfile): ?>
+                                <button class="remove-friend text-red-500 hover:text-red-700" data-id="<?php echo $friend['id']; ?>">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                    </svg>
+                                </button>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
+        
+        <!-- Pending friend requests (only for own profile) -->
+        <?php if ($isOwnProfile && !empty($pendingRequests)): ?>
+        <div class="friend-requests mb-8">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Demandes d'amis en attente (<?php echo count($pendingRequests); ?>)</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <?php foreach ($pendingRequests as $request): ?>
+                    <div class="request-card bg-gray-50 p-4 rounded shadow-sm flex items-center">
+                        <div class="request-avatar bg-primary text-white rounded-full w-10 h-10 flex items-center justify-center text-lg mr-3">
+                            <span><?php echo strtoupper(substr($request['username'], 0, 1)); ?></span>
+                        </div>
+                        <div class="request-info flex-grow">
+                            <a href="/profile.php?id=<?php echo $request['id']; ?>" class="font-medium text-gray-800 hover:text-primary"><?php echo htmlspecialchars($request['username']); ?></a>
+                            <p class="text-xs text-gray-500">Demande envoyée le <?php echo date('d/m/Y', strtotime($request['request_date'])); ?></p>
+                        </div>
+                        <div class="request-actions flex">
+                            <button class="accept-request text-green-500 hover:text-green-700 mr-2" data-id="<?php echo $request['id']; ?>">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                            <button class="reject-request text-red-500 hover:text-red-700" data-id="<?php echo $request['id']; ?>">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+        
+        <!-- Statistiques du joueur -->
+        <div class="mt-8">
+            <h2 class="text-2xl font-bold mb-4">Statistiques de jeu</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-white p-4 shadow rounded">
+                    <h3 class="text-lg font-semibold text-purple-800 mb-2">Parties jouées</h3>
+                    <p class="text-3xl font-bold"><?php echo $totalGames; ?></p>
+                </div>
+                <div class="bg-white p-4 shadow rounded">
+                    <h3 class="text-lg font-semibold text-green-600 mb-2">Victoires</h3>
+                    <p class="text-3xl font-bold"><?php echo $victories; ?></p>
+                </div>
+                <div class="bg-white p-4 shadow rounded">
+                    <h3 class="text-lg font-semibold text-red-600 mb-2">Défaites</h3>
+                    <p class="text-3xl font-bold"><?php echo $defeats; ?></p>
+                </div>
+                <div class="bg-white p-4 shadow rounded">
+                    <h3 class="text-lg font-semibold text-blue-600 mb-2">% de victoires</h3>
+                    <p class="text-3xl font-bold">
+                        <?php 
+                        echo $totalGames > 0 ? round(($victories / $totalGames) * 100, 1) . '%' : '0%'; 
+                        ?>
+                    </p>
+                </div>
+            </div>
+            
+            <?php if ($isOwnProfile && $totalGames > 0): ?>
+            <div class="mt-4">
+                <a href="/game/history.php" class="text-purple-600 hover:text-purple-800">
+                    Voir l'historique complet des parties →
+                </a>
+            </div>
+            <?php endif; ?>
+        </div>
+        
     </div>
+    <?php endif; ?>
 </div>
+
+<!-- Notification toast -->
+<div id="notification" class="fixed bottom-4 right-4 px-4 py-2 rounded shadow-lg hidden"></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Tab switching
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const tab = button.dataset.tab;
+            
+            // Update active button
+            tabButtons.forEach(btn => btn.classList.remove('active', 'text-primary', 'border-primary'));
+            button.classList.add('active', 'text-primary', 'border-primary');
+            
+            // Show selected tab content
+            tabContents.forEach(content => {
+                content.classList.add('hidden');
+                if (content.id === `${tab}-tab`) {
+                    content.classList.remove('hidden');
+                }
+            });
+        });
+    });
+    
+    // Update profile information
+    const updateProfileForm = document.getElementById('updateProfileForm');
+    if (updateProfileForm) {
+        updateProfileForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(updateProfileForm);
+            
+            fetch('/api/profile/update_profile.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Profil mis à jour avec succès', 'success');
+                } else {
+                    showNotification(data.message || 'Une erreur est survenue', 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Une erreur est survenue', 'error');
+                console.error('Error:', error);
+            });
+        });
+    }
+    
+    // Update password
+    const updatePasswordForm = document.getElementById('updatePasswordForm');
+    if (updatePasswordForm) {
+        updatePasswordForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(updatePasswordForm);
+            
+            if (formData.get('new_password') !== formData.get('confirm_password')) {
+                showNotification('Les mots de passe ne correspondent pas', 'error');
+                return;
+            }
+            
+            fetch('/api/profile/update_password.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Mot de passe mis à jour avec succès', 'success');
+                    updatePasswordForm.reset();
+                } else {
+                    showNotification(data.message || 'Une erreur est survenue', 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Une erreur est survenue', 'error');
+                console.error('Error:', error);
+            });
+        });
+    }
+    
+    // Update privacy settings
+    const updatePrivacyForm = document.getElementById('updatePrivacyForm');
+    if (updatePrivacyForm) {
+        updatePrivacyForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(updatePrivacyForm);
+            
+            fetch('/api/profile/update_privacy.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Paramètres de confidentialité mis à jour', 'success');
+                } else {
+                    showNotification(data.message || 'Une erreur est survenue', 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Une erreur est survenue', 'error');
+                console.error('Error:', error);
+            });
+        });
+    }
+    
+    // Friend request functions
+    const sendRequestBtn = document.getElementById('sendRequest');
+    if (sendRequestBtn) {
+        sendRequestBtn.addEventListener('click', function() {
+            const userId = this.dataset.id;
+            
+            fetch('/api/friend/send_request.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `user_id=${userId}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    this.disabled = true;
+                    this.textContent = 'Demande envoyée';
+                    this.classList.remove('bg-primary');
+                    this.classList.add('bg-gray-300', 'text-gray-700');
+                    showNotification('Demande d\'ami envoyée', 'success');
+                } else {
+                    showNotification(data.message || 'Une erreur est survenue', 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Une erreur est survenue', 'error');
+                console.error('Error:', error);
+            });
+        });
+    }
+    
+    // Accept friend request
+    const acceptRequestBtns = document.querySelectorAll('#acceptRequest, .accept-request');
+    acceptRequestBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const userId = this.dataset.id;
+            
+            fetch('/api/friend/respond_request.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `user_id=${userId}&action=accept`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Demande d\'ami acceptée', 'success');
+                    // Reload page to update UI
+                    location.reload();
+                } else {
+                    showNotification(data.message || 'Une erreur est survenue', 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Une erreur est survenue', 'error');
+                console.error('Error:', error);
+            });
+        });
+    });
+    
+    // Reject friend request
+    const rejectRequestBtns = document.querySelectorAll('#rejectRequest, .reject-request');
+    rejectRequestBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const userId = this.dataset.id;
+            
+            fetch('/api/friend/respond_request.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `user_id=${userId}&action=reject`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Demande d\'ami refusée', 'success');
+                    // Reload page to update UI
+                    location.reload();
+                } else {
+                    showNotification(data.message || 'Une erreur est survenue', 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Une erreur est survenue', 'error');
+                console.error('Error:', error);
+            });
+        });
+    });
+    
+    // Remove friend
+    const removeFriendBtns = document.querySelectorAll('#removeFriend, .remove-friend');
+    removeFriendBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const userId = this.dataset.id;
+            
+            if (!confirm('Êtes-vous sûr de vouloir retirer cet ami ?')) {
+                return;
+            }
+            
+            fetch('/api/friend/remove_friend.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `user_id=${userId}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Ami retiré avec succès', 'success');
+                    // Reload page to update UI
+                    location.reload();
+                } else {
+                    showNotification(data.message || 'Une erreur est survenue', 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Une erreur est survenue', 'error');
+                console.error('Error:', error);
+            });
+        });
+    });
+    
+    // Notification display function
+    function showNotification(message, type) {
+        const notification = document.getElementById('notification');
+        notification.textContent = message;
+        notification.classList.remove('hidden', 'bg-green-500', 'bg-red-500');
+        
+        if (type === 'success') {
+            notification.classList.add('bg-green-500', 'text-white');
+        } else {
+            notification.classList.add('bg-red-500', 'text-white');
+        }
+        
+        notification.classList.remove('hidden');
+        
+        setTimeout(() => {
+            notification.classList.add('hidden');
+        }, 3000);
+    }
+});
+</script>
 
 <?php
 // Inclure le pied de page

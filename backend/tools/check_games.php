@@ -1,4 +1,7 @@
 <?php
+// Script pour vérifier les parties dans la base de données
+// Ce script affiche toutes les parties et leurs statuts
+
 // Activer l'affichage des erreurs
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -11,168 +14,177 @@ require_once __DIR__ . '/../../backend/db/Database.php';
 // Se connecter à la base de données
 $db = Database::getInstance()->getConnection();
 
-// Récupérer le nombre de parties par statut
-echo "<h2>Nombre de parties par statut :</h2>";
-$stmt = $db->query("SELECT status, COUNT(*) as count FROM games GROUP BY status");
-echo "<table border='1' cellpadding='5'>";
-echo "<tr><th>Statut</th><th>Nombre</th></tr>";
-while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    echo "<tr>";
-    echo "<td>" . $row['status'] . "</td>";
-    echo "<td>" . $row['count'] . "</td>";
-    echo "</tr>";
-}
-echo "</table>";
+echo "<h1>Vérification des parties de jeu</h1>";
 
-// Récupérer toutes les parties
-echo "<h2>Liste des 20 dernières parties dans la base de données :</h2>";
-$stmt = $db->query("SELECT g.*, 
-                    u1.username as player1_name, 
-                    u2.username as player2_name 
-                    FROM games g
-                    LEFT JOIN users u1 ON g.player1_id = u1.id
-                    LEFT JOIN users u2 ON g.player2_id = u2.id
-                    ORDER BY g.updated_at DESC 
-                    LIMIT 20");
-
-echo "<table border='1' cellpadding='5'>";
-echo "<tr>
-        <th>ID</th>
-        <th>Joueur 1</th>
-        <th>Joueur 2</th>
-        <th>Statut</th>
-        <th>Joueur actuel</th>
-        <th>Gagnant</th>
-        <th>Date création</th>
-        <th>Date mise à jour</th>
-    </tr>";
-
-while ($game = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    $winner_name = "";
-    if ($game['winner_id'] == $game['player1_id']) {
-        $winner_name = $game['player1_name'];
-    } elseif ($game['winner_id'] == $game['player2_id']) {
-        $winner_name = $game['player2_name'];
-    } elseif ($game['winner_id'] === null) {
-        $winner_name = "-";
+// 1. Vérifier la structure de la table games
+try {
+    $stmt = $db->query("DESCRIBE games");
+    $columns = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    echo "<h2>Structure de la table games</h2>";
+    echo "<table border='1' cellpadding='5'>";
+    echo "<tr><th>Colonne</th><th>Type</th><th>Null</th><th>Clé</th><th>Défaut</th><th>Extra</th></tr>";
+    
+    foreach ($columns as $column) {
+        echo "<tr>";
+        echo "<td>" . $column['Field'] . "</td>";
+        echo "<td>" . $column['Type'] . "</td>";
+        echo "<td>" . $column['Null'] . "</td>";
+        echo "<td>" . $column['Key'] . "</td>";
+        echo "<td>" . $column['Default'] . "</td>";
+        echo "<td>" . $column['Extra'] . "</td>";
+        echo "</tr>";
     }
     
-    echo "<tr>";
-    echo "<td>" . $game['id'] . "</td>";
-    echo "<td>" . $game['player1_name'] . " (ID: " . $game['player1_id'] . ")</td>";
-    echo "<td>" . ($game['player2_id'] == 0 ? 'IA' : ($game['player2_name'] . " (ID: " . $game['player2_id'] . ")")) . "</td>";
-    echo "<td>" . $game['status'] . "</td>";
-    echo "<td>" . $game['current_player'] . "</td>";
-    echo "<td>" . ($game['winner_id'] !== null ? $winner_name . " (ID: " . $game['winner_id'] . ")" : "-") . "</td>";
-    echo "<td>" . $game['created_at'] . "</td>";
-    echo "<td>" . $game['updated_at'] . "</td>";
-    echo "</tr>";
-}
-echo "</table>";
-
-// Structures des tables
-echo "<h2>Structure de la table 'games'</h2>";
-$stmt = $db->query("DESCRIBE games");
-echo "<table border='1' cellpadding='5'>";
-echo "<tr><th>Champ</th><th>Type</th><th>Null</th><th>Clé</th><th>Défaut</th><th>Extra</th></tr>";
-while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    echo "<tr>";
-    echo "<td>" . $row['Field'] . "</td>";
-    echo "<td>" . $row['Type'] . "</td>";
-    echo "<td>" . $row['Null'] . "</td>";
-    echo "<td>" . $row['Key'] . "</td>";
-    echo "<td>" . $row['Default'] . "</td>";
-    echo "<td>" . $row['Extra'] . "</td>";
-    echo "</tr>";
-}
-echo "</table>";
-
-// Vérifier les permissions de l'utilisateur actuel
-echo "<h2>Si vous êtes connecté, vérifiez vos parties en cours/terminées :</h2>";
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    echo "</table>";
+} catch (PDOException $e) {
+    echo "<p style='color:red'>Erreur lors de la lecture de la structure de la table games: " . $e->getMessage() . "</p>";
 }
 
-if (isset($_SESSION['user_id'])) {
-    $user_id = $_SESSION['user_id'];
-    $username = $_SESSION['username'] ?? 'Inconnu';
+// 2. Compter les parties par statut
+try {
+    $stmt = $db->query("SELECT status, COUNT(*) as count FROM games GROUP BY status");
+    $statusCounts = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    echo "<p>Utilisateur connecté : ID " . $user_id . " (" . $username . ")</p>";
+    echo "<h2>Nombre de parties par statut</h2>";
+    echo "<table border='1' cellpadding='5'>";
+    echo "<tr><th>Statut</th><th>Nombre</th></tr>";
     
-    // Parties en cours
-    echo "<h3>Parties en cours :</h3>";
-    $stmt = $db->prepare("SELECT g.*, 
-                          u1.username as player1_name, 
-                          u2.username as player2_name 
-                          FROM games g
-                          LEFT JOIN users u1 ON g.player1_id = u1.id
-                          LEFT JOIN users u2 ON g.player2_id = u2.id
-                          WHERE (g.player1_id = ? OR g.player2_id = ?) 
-                          AND g.status = 'in_progress'
-                          ORDER BY g.updated_at DESC");
-    $stmt->execute([$user_id, $user_id]);
+    foreach ($statusCounts as $statusCount) {
+        echo "<tr>";
+        echo "<td>" . $statusCount['status'] . "</td>";
+        echo "<td>" . $statusCount['count'] . "</td>";
+        echo "</tr>";
+    }
     
-    if ($stmt->rowCount() > 0) {
-        echo "<table border='1' cellpadding='5'>";
-        echo "<tr><th>ID</th><th>Adversaire</th><th>Date de début</th><th>Dernier mouvement</th></tr>";
+    echo "</table>";
+} catch (PDOException $e) {
+    echo "<p style='color:red'>Erreur lors du comptage des parties par statut: " . $e->getMessage() . "</p>";
+}
+
+// 3. Vérifier les parties contre des bots
+try {
+    $stmt = $db->query("SELECT COUNT(*) as count FROM games WHERE player2_id = 0");
+    $botGamesCount = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    echo "<h2>Parties contre des bots</h2>";
+    echo "<p>Nombre total de parties contre des bots: " . $botGamesCount['count'] . "</p>";
+    
+    // Détails des parties contre des bots
+    if ($botGamesCount['count'] > 0) {
+        $stmt = $db->query("SELECT g.*, u.username FROM games g JOIN users u ON g.player1_id = u.id WHERE g.player2_id = 0 ORDER BY g.created_at DESC LIMIT 20");
+        $botGames = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        while ($game = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $opponent = ($game['player1_id'] == $user_id) ? 
-                ($game['player2_id'] == 0 ? 'IA' : $game['player2_name']) : 
-                $game['player1_name'];
+        echo "<h3>Dernières parties contre des bots</h3>";
+        echo "<table border='1' cellpadding='5'>";
+        echo "<tr>
+                <th>ID</th>
+                <th>Joueur</th>
+                <th>Statut</th>
+                <th>Gagnant</th>
+                <th>Créée le</th>
+                <th>Mise à jour le</th>
+            </tr>";
+            
+        foreach ($botGames as $game) {
+            $winnerInfo = "N/A";
+            if ($game['winner_id'] !== null) {
+                if ($game['winner_id'] == $game['player1_id']) {
+                    $winnerInfo = $game['username'] . " (humain)";
+                } else if ($game['winner_id'] == 0) {
+                    $winnerInfo = "IA";
+                } else {
+                    $winnerInfo = "ID: " . $game['winner_id'] . " (inconnu)";
+                }
+            }
             
             echo "<tr>";
             echo "<td>" . $game['id'] . "</td>";
-            echo "<td>" . $opponent . "</td>";
+            echo "<td>" . $game['username'] . " (ID: " . $game['player1_id'] . ")</td>";
+            echo "<td>" . $game['status'] . "</td>";
+            echo "<td>" . $winnerInfo . "</td>";
             echo "<td>" . $game['created_at'] . "</td>";
             echo "<td>" . $game['updated_at'] . "</td>";
             echo "</tr>";
         }
         
         echo "</table>";
-    } else {
-        echo "<p>Aucune partie en cours.</p>";
     }
+} catch (PDOException $e) {
+    echo "<p style='color:red'>Erreur lors de la vérification des parties contre des bots: " . $e->getMessage() . "</p>";
+}
+
+// 4. Vérifier les statistiques des joueurs
+try {
+    $stmt = $db->query("SELECT COUNT(*) as count FROM stats");
+    $statsCount = $stmt->fetch(PDO::FETCH_ASSOC);
     
-    // Parties terminées
-    echo "<h3>Parties terminées :</h3>";
-    $stmt = $db->prepare("SELECT g.*, 
-                          u1.username as player1_name, 
-                          u2.username as player2_name 
-                          FROM games g
-                          LEFT JOIN users u1 ON g.player1_id = u1.id
-                          LEFT JOIN users u2 ON g.player2_id = u2.id
-                          WHERE (g.player1_id = ? OR g.player2_id = ?) 
-                          AND g.status = 'finished'
-                          ORDER BY g.updated_at DESC");
-    $stmt->execute([$user_id, $user_id]);
+    echo "<h2>Statistiques des joueurs</h2>";
+    echo "<p>Nombre d'entrées dans la table stats: " . $statsCount['count'] . "</p>";
     
-    if ($stmt->rowCount() > 0) {
-        echo "<table border='1' cellpadding='5'>";
-        echo "<tr><th>ID</th><th>Adversaire</th><th>Résultat</th><th>Date de fin</th></tr>";
+    // Détails des statistiques des joueurs
+    if ($statsCount['count'] > 0) {
+        $stmt = $db->query("SELECT s.*, u.username FROM stats s JOIN users u ON s.user_id = u.id ORDER BY s.games_played DESC LIMIT 20");
+        $stats = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        while ($game = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $opponent = ($game['player1_id'] == $user_id) ? 
-                ($game['player2_id'] == 0 ? 'IA' : $game['player2_name']) : 
-                $game['player1_name'];
+        echo "<h3>Statistiques des joueurs les plus actifs</h3>";
+        echo "<table border='1' cellpadding='5'>";
+        echo "<tr>
+                <th>Joueur</th>
+                <th>Parties jouées</th>
+                <th>Victoires</th>
+                <th>Défaites</th>
+                <th>% Victoires</th>
+                <th>Dernière partie</th>
+            </tr>";
             
-            $result = "Match nul";
-            if ($game['winner_id'] !== null) {
-                $result = ($game['winner_id'] == $user_id) ? "Victoire" : "Défaite";
-            }
+        foreach ($stats as $stat) {
+            $winPercentage = $stat['games_played'] > 0 ? round(($stat['games_won'] / $stat['games_played']) * 100, 2) : 0;
             
             echo "<tr>";
-            echo "<td>" . $game['id'] . "</td>";
-            echo "<td>" . $opponent . "</td>";
-            echo "<td>" . $result . "</td>";
-            echo "<td>" . $game['updated_at'] . "</td>";
+            echo "<td>" . $stat['username'] . " (ID: " . $stat['user_id'] . ")</td>";
+            echo "<td>" . $stat['games_played'] . "</td>";
+            echo "<td>" . $stat['games_won'] . "</td>";
+            echo "<td>" . $stat['games_lost'] . "</td>";
+            echo "<td>" . $winPercentage . "%</td>";
+            echo "<td>" . $stat['last_game'] . "</td>";
             echo "</tr>";
         }
         
         echo "</table>";
-    } else {
-        echo "<p>Aucune partie terminée.</p>";
     }
-} else {
-    echo "<p>Aucun utilisateur connecté. <a href='/auth/login.php'>Se connecter</a></p>";
-} 
+} catch (PDOException $e) {
+    echo "<p style='color:red'>Erreur lors de la vérification des statistiques des joueurs: " . $e->getMessage() . "</p>";
+}
+
+// 5. Vérifier le trigger
+try {
+    $stmt = $db->query("SHOW TRIGGERS WHERE `Table` = 'games'");
+    $triggers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    echo "<h2>Triggers sur la table games</h2>";
+    
+    if (count($triggers) > 0) {
+        echo "<ul>";
+        foreach ($triggers as $trigger) {
+            echo "<li>" . $trigger['Trigger'] . " - " . $trigger['Statement'] . "</li>";
+        }
+        echo "</ul>";
+    } else {
+        echo "<p style='color:red'>Aucun trigger trouvé pour la table games!</p>";
+    }
+} catch (PDOException $e) {
+    echo "<p style='color:red'>Erreur lors de la vérification des triggers: " . $e->getMessage() . "</p>";
+}
+
+// 6. Suggestions de correction
+echo "<h2>Suggestions de correction</h2>";
+echo "<ul>";
+echo "<li>Si vous avez des parties qui ne s'affichent pas dans l'historique, vérifiez leurs statuts : ils doivent être 'in_progress' ou 'finished'.</li>";
+echo "<li>Pour les parties contre des bots, vérifiez que player2_id est bien défini à 0 et que les données sont correctement enregistrées.</li>";
+echo "<li>Si les statistiques ne sont pas mises à jour, vérifiez la présence du trigger 'after_game_finished' ou exécutez le script init_stats.php.</li>";
+echo "<li>Si vous voyez des parties mais qu'elles ne s'affichent pas correctement dans l'interface, redémarrez votre session de navigation.</li>";
+echo "</ul>";
+
+echo "<p><a href='init_stats.php'>Initialiser/Réparer les statistiques des joueurs</a></p>";
+?> 

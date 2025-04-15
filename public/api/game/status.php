@@ -13,6 +13,7 @@ ini_set('error_log', __DIR__ . '/../../../backend/logs/php_errors.log');
 
 require_once __DIR__ . '/../../../backend/includes/config.php';
 require_once __DIR__ . '/../../../backend/controllers/GameController.php';
+require_once __DIR__ . '/../../../backend/controllers/ProfileController.php';
 require_once __DIR__ . '/../../../backend/includes/session.php';
 
 // Vérifier si l'utilisateur est connecté
@@ -30,6 +31,10 @@ if (!Session::isLoggedIn()) {
 
 // Récupérer l'ID de l'utilisateur
 $user_id = Session::getUserId();
+
+// Mettre à jour l'activité de l'utilisateur
+$profileController = new ProfileController();
+$profileController->updateActivity();
 
 // Log pour débogage
 error_log("API status.php appelée par l'utilisateur ID: " . $user_id);

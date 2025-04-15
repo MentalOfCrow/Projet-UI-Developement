@@ -7,6 +7,9 @@ error_reporting(E_ALL);
 require_once __DIR__ . '/../../backend/includes/config.php';
 require_once __DIR__ . '/../../backend/db/Database.php';
 require_once __DIR__ . '/../../backend/includes/session.php';
+require_once __DIR__ . '/../../config/config.php';
+require_once __DIR__ . '/../models/Database.php';
+require_once __DIR__ . '/../../backend/controllers/GameController.php';
 
 // Vérifier si l'utilisateur est connecté
 if (!Session::isLoggedIn()) {
@@ -209,5 +212,178 @@ if (count($triggers) > 0) {
     ");
     
     echo "Trigger recréé avec succès.<br>";
+}
+
+function debugLog($message) {
+    echo "[DEBUG] " . $message . "\n";
+}
+
+// Get all games for user 4
+$stmt = $db->prepare("
+    SELECT g.*, 
+           p1.username as player1_name, 
+           p2.username as player2_name
+    FROM games g
+    JOIN users p1 ON g.player1_id = p1.id
+    JOIN users p2 ON g.player2_id = p2.id
+    WHERE g.player1_id = 4 OR g.player2_id = 4
+    ORDER BY g.created_at DESC
+");
+$stmt->execute();
+$games = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+debugLog("\nGame History Analysis:");
+debugLog("Total games found: " . count($games));
+
+$actualStats = [
+    'total' => 0,
+    'wins' => 0,
+    'losses' => 0,
+    'draws' => 0,
+    'ongoing' => 0
+];
+
+foreach ($games as $game) {
+    debugLog("\nGame ID: " . $game['id']);
+    debugLog("Status: " . $game['status']);
+    debugLog("Winner ID: " . ($game['winner_id'] ?? 'None'));
+    debugLog("Player 1: " . $game['player1_name'] . " (ID: " . $game['player1_id'] . ")");
+    debugLog("Player 2: " . $game['player2_name'] . " (ID: " . $game['player2_id'] . ")");
+    
+    if ($game['status'] === 'finished') {
+        $actualStats['total']++;
+        if ($game['winner_id'] === 4) {
+            $actualStats['wins']++;
+        } elseif ($game['winner_id'] === null) {
+            $actualStats['draws']++;
+        } else {
+            $actualStats['losses']++;
+        }
+    } elseif ($game['status'] === 'in_progress') {
+        $actualStats['ongoing']++;
+    }
+}
+
+debugLog("\nCalculated Statistics:");
+debugLog("Total finished games: " . $actualStats['total']);
+debugLog("Wins: " . $actualStats['wins']);
+debugLog("Losses: " . $actualStats['losses']);
+debugLog("Draws: " . $actualStats['draws']);
+debugLog("Ongoing games: " . $actualStats['ongoing']);
+
+debugLog("\nDiscrepancy Analysis:");
+debugLog("Stored vs Calculated games played: " . $user_stats['games_played'] . " vs " . $actualStats['total']);
+debugLog("Stored vs Calculated wins: " . $user_stats['games_won'] . " vs " . $actualStats['wins']);
+debugLog("Stored vs Calculated losses: " . $user_stats['games_lost'] . " vs " . $actualStats['losses']);
+
+try {
+    $db = new Database();
+    $gameController = new GameController();
+    
+    // Récupérer tous les utilisateurs
+    $users = $db->query("SELECT id, username FROM users", []);
+    
+    foreach ($users as $user) {
+        debugLog("Analyzing user: " . $user['username'] . " (ID: " . $user['id'] . ")");
+        
+        // Récupérer les statistiques
+        $stats = $db->query("SELECT * FROM stats WHERE user_id = ?", [$user['id']]);
+        $statsData = $stats ? $stats[0] : null;
+        
+        // Récupérer l'historique des parties
+        $games = $db->query(
+            "SELECT * FROM games WHERE (player1_id = ? OR player2_id = ?) AND status = 'finished'",
+            [$user['id'], $user['id']]
+        );
+        
+        // Analyser les résultats
+        $actualStats = [
+            'games_played' => 0,
+            'wins' => 0,
+            'losses' => 0,
+            'draws' => 0
+        ];
+        
+        foreach ($games as $game) {
+            $actualStats['games_played']++;
+            
+            if ($game['result'] === 'draw') {
+                $actualStats['draws']++;
+            } elseif ($game['winner_id'] === $user['id']) {
+                $actualStats['wins']++;
+            } else {
+                $actualStats['losses']++;
+            }
+        }
+        
+        debugLog("Stored statistics:");
+        if ($statsData) {
+            debugLog("  Games played: " . $statsData['games_played']);
+            debugLog("  Wins: " . $statsData['wins']);
+            debugLog("  Losses: " . $statsData['losses']);
+            debugLog("  Draws: " . $statsData['draws']);
+        } else {
+            debugLog("  No stored statistics found");
+        }
+        
+        debugLog("Actual statistics from game history:");
+        debugLog("  Games played: " . $actualStats['games_played']);
+        debugLog("  Wins: " . $actualStats['wins']);
+        debugLog("  Losses: " . $actualStats['losses']);
+        debugLog("  Draws: " . $actualStats['draws']);
+        
+        // Vérifier les incohérences
+        if ($statsData) {
+            $discrepancies = [];
+            foreach ($actualStats as $key => $value) {
+                if ($statsData[$key] !== $value) {
+                    $discrepancies[] = "$key (stored: {$statsData[$key]}, actual: $value)";
+                }
+            }
+            
+            if (!empty($discrepancies)) {
+                debugLog("DISCREPANCIES FOUND:");
+                foreach ($discrepancies as $discrepancy) {
+                    debugLog("  - " . $discrepancy);
+                }
+                
+                // Corriger les statistiques
+                $db->query(
+                    "UPDATE stats SET games_played = ?, wins = ?, losses = ?, draws = ? WHERE user_id = ?",
+                    [
+                        $actualStats['games_played'],
+                        $actualStats['wins'],
+                        $actualStats['losses'],
+                        $actualStats['draws'],
+                        $user['id']
+                    ]
+                );
+                debugLog("Statistics corrected for user " . $user['username']);
+            } else {
+                debugLog("No discrepancies found");
+            }
+        } else {
+            // Créer les statistiques si elles n'existent pas
+            $db->query(
+                "INSERT INTO stats (user_id, games_played, wins, losses, draws) VALUES (?, ?, ?, ?, ?)",
+                [
+                    $user['id'],
+                    $actualStats['games_played'],
+                    $actualStats['wins'],
+                    $actualStats['losses'],
+                    $actualStats['draws']
+                ]
+            );
+            debugLog("Created new statistics record for user " . $user['username']);
+        }
+        
+        debugLog("----------------------------------------");
+    }
+    
+    debugLog("Analysis completed successfully");
+    
+} catch (Exception $e) {
+    debugLog("ERROR: " . $e->getMessage());
+    debugLog("Stack trace: " . $e->getTraceAsString());
 }
 ?> 

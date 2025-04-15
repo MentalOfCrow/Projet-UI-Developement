@@ -13,6 +13,7 @@ ini_set('error_log', __DIR__ . '/../../../backend/logs/php_errors.log');
 
 require_once __DIR__ . '/../../../backend/includes/config.php';
 require_once __DIR__ . '/../../../backend/controllers/GameController.php';
+require_once __DIR__ . '/../../../backend/controllers/ProfileController.php';
 require_once __DIR__ . '/../../../backend/includes/session.php';
 
 // Vérifier si l'utilisateur est connecté
@@ -28,24 +29,29 @@ if (!Session::isLoggedIn()) {
     exit;
 }
 
-// Log pour débogage
-error_log("API create_bot_game.php appelée par l'utilisateur ID: " . Session::getUserId());
-
 // Récupérer l'ID de l'utilisateur
 $user_id = Session::getUserId();
 
+// Mettre à jour l'activité de l'utilisateur
+$profileController = new ProfileController();
+$profileController->updateActivity();
+
+// Log pour débogage
+error_log("API create_bot_game.php appelée par l'utilisateur ID: " . Session::getUserId());
+
 try {
     // Créer une instance de GameController
+    error_log("create_bot_game.php - Avant création du GameController");
     $gameController = new GameController();
+    error_log("create_bot_game.php - GameController créé avec succès");
     
     // Log pour débogage
     error_log("Création d'une partie contre un bot pour l'utilisateur ID: " . $user_id);
     
     // Créer une partie contre un bot
+    error_log("create_bot_game.php - Avant appel à createBotGame()");
     $result = $gameController->createBotGame($user_id);
-    
-    // Log du résultat
-    error_log("Résultat de createBotGame: " . json_encode($result));
+    error_log("create_bot_game.php - Après appel à createBotGame() - Résultat success: " . ($result['success'] ? 'true' : 'false'));
     
     // Vérifier que le fichier board.php existe
     $boardFilePath = __DIR__ . '/../../game/board.php';

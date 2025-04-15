@@ -1130,7 +1130,14 @@ class GameController {
             // Vérifier si c'est un match nul (les deux joueurs sont bloqués)
             $isDrawGame = false;
             
-            if ($winner_id === null && $loser_id === null) {
+            // Correction: Partie contre l'IA ne peut jamais être un match nul
+            // Si winner_id est null et que c'est une partie contre l'IA, l'IA gagne
+            if ($gameInfo['player2_id'] == 0 && $winner_id === null) {
+                $winner_id = 0; // L'IA gagne par défaut
+                error_log("endGame: Partie contre l'IA avec winner_id null, l'IA gagne automatiquement");
+            }
+            // Pour les parties normales, vérifier si c'est un vrai match nul
+            else if ($winner_id === null && $loser_id === null) {
                 // Analyser l'état du plateau pour confirmer que c'est bien un match nul
                 $board = json_decode($gameInfo['board_state'], true);
                 $player1Blocked = $this->checkGameOver($board, 1);
@@ -1171,15 +1178,27 @@ class GameController {
             $finalWinnerId = $winner_id; // Peut être null si match nul
             $status = 'finished';
             
+            // Déterminer le résultat de la partie
+            $result = null;
+            if ($isDrawGame) {
+                $result = 'draw';
+            } else if ($finalWinnerId === $gameInfo['player1_id']) {
+                $result = 'player1_won';
+            } else if ($finalWinnerId === $gameInfo['player2_id'] || $finalWinnerId === 0) {
+                $result = 'player2_won';
+            }
+            
             $updateQuery = "UPDATE games SET 
                      status = :status, 
                      winner_id = :winner_id,
+                     result = :result,
                      updated_at = NOW()
                      WHERE id = :game_id";
             
             $updateStmt = $this->db->prepare($updateQuery);
             $updateStmt->bindParam(':status', $status);
             $updateStmt->bindParam(':winner_id', $finalWinnerId);
+            $updateStmt->bindParam(':result', $result);
             $updateStmt->bindParam(':game_id', $game_id);
             
             if (!$updateStmt->execute()) {
@@ -1188,7 +1207,7 @@ class GameController {
                 return false;
             }
             
-            error_log("endGame: Statut de la partie mis à jour avec succès, statut: '{$status}', winner_id: " . ($finalWinnerId ?? 'null') . ", isDrawGame: " . ($isDrawGame ? 'true' : 'false'));
+            error_log("endGame: Statut de la partie mis à jour avec succès, statut: '{$status}', winner_id: " . ($finalWinnerId ?? 'null') . ", result: " . ($result ?? 'null') . ", isDrawGame: " . ($isDrawGame ? 'true' : 'false'));
             
             // Mettre à jour les statistiques manuellement (en plus du trigger)
             $player1_id = $gameInfo['player1_id'];
@@ -1361,17 +1380,30 @@ class GameController {
                 return false;
             }
             
-            // Mettre à jour les statistiques dans la table stats - uniquement incrémenter games_played
-            $query = "INSERT INTO stats (user_id, games_played, games_won, games_lost, last_game) 
-                      VALUES (?, 1, 0, 0, NOW()) 
+            // Mettre à jour les statistiques
+            $query = "INSERT INTO stats (user_id, games_played, draws, last_game) 
+                      VALUES (?, 1, 1, NOW()) 
                       ON DUPLICATE KEY UPDATE 
                       games_played = games_played + 1,
+                      draws = draws + 1,
                       last_game = NOW()";
             
             $stmt = $this->db->prepare($query);
             $stmt->execute([$user_id]);
             
-            return true;
+            // Vérifier que les statistiques ont bien été mises à jour
+            $checkStatsQuery = "SELECT * FROM stats WHERE user_id = ?";
+            $checkStatsStmt = $this->db->prepare($checkStatsQuery);
+            $checkStatsStmt->execute([$user_id]);
+            
+            if ($checkStatsStmt->rowCount() > 0) {
+                $stats = $checkStatsStmt->fetch(PDO::FETCH_ASSOC);
+                error_log("updatePlayerStatsForDraw: Statistiques mises à jour - Parties: {$stats['games_played']}, Matchs nuls: {$stats['draws']}");
+                return true;
+            } else {
+                error_log("updatePlayerStatsForDraw: Les statistiques n'ont pas été mises à jour correctement");
+                return false;
+            }
         } catch (PDOException $e) {
             error_log("Erreur dans updatePlayerStatsForDraw: " . $e->getMessage());
             return false;
@@ -1394,8 +1426,8 @@ class GameController {
             
             if ($checkUserStmt->rowCount() == 0) {
                 error_log("updatePlayerStats: Utilisateur ID {$user_id} non trouvé dans la base de données");
-            return false;
-        }
+                return false;
+            }
             
             // Mettre à jour les statistiques dans la table stats
             // Utiliser INSERT ... ON DUPLICATE KEY UPDATE pour créer ou mettre à jour
@@ -1767,71 +1799,62 @@ class GameController {
      */
     public function getUserGames($userId, $limit, $offset) {
         try {
-            // Log pour débogage
-            error_log("getUserGames appelé pour l'utilisateur ID: " . $userId . ", limit: " . $limit . ", offset: " . $offset);
-            
-            // Convertir en entiers pour s'assurer que les types sont corrects
-            $userId = (int)$userId;
-            $limit = (int)$limit;
-            $offset = (int)$offset;
-            
+            // Préparer la requête SQL
             $query = "SELECT g.*, 
                       u1.username as player1_username, 
-                      u2.username as player2_username 
+                      u2.username as player2_username,
+                      CASE 
+                          WHEN g.status = 'finished' THEN 'Terminée'
+                          WHEN g.status = 'in_progress' THEN 'En cours'
+                          ELSE g.status
+                      END as status_text
                       FROM games g
                       LEFT JOIN users u1 ON g.player1_id = u1.id
                       LEFT JOIN users u2 ON g.player2_id = u2.id
-                      WHERE (g.player1_id = ? OR g.player2_id = ?) 
+                      WHERE (g.player1_id = :user_id OR g.player2_id = :user_id)
+                      AND g.status = 'finished'
                       ORDER BY g.updated_at DESC
-                      LIMIT ?, ?";
+                      LIMIT :limit OFFSET :offset";
             
             $stmt = $this->db->prepare($query);
-            // Utiliser bindValue avec les indices de paramètres plutôt que bindParam avec des noms
-            $stmt->bindValue(1, $userId, PDO::PARAM_INT);
-            $stmt->bindValue(2, $userId, PDO::PARAM_INT);
-            $stmt->bindValue(3, $offset, PDO::PARAM_INT);
-            $stmt->bindValue(4, $limit, PDO::PARAM_INT);
+            $stmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
+            $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindParam(':offset', $offset, PDO::PARAM_INT);
             $stmt->execute();
             
+            // Récupérer les résultats
             $games = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
-            // Log du nombre de parties trouvées
-            error_log("Nombre de parties trouvées pour l'utilisateur " . $userId . ": " . count($games));
-            
-            // Ajouter le résultat à chaque partie du point de vue de l'utilisateur
+            // Ajouter des informations supplémentaires à chaque partie
             foreach ($games as &$game) {
-                // Par défaut, le résultat est non défini
-                $game['result'] = null;
+                // Définir le résultat pour l'utilisateur
+                $isPlayer1 = ($game['player1_id'] == $userId);
                 
-                // Log des détails de la partie
-                error_log("Traitement de la partie ID: " . $game['id'] . ", status: " . $game['status'] . ", winner_id: " . ($game['winner_id'] ?? 'null'));
-                
-                // Note: Certaines bases de données pourraient avoir un traitement différent des valeurs NULL vs empty string
-                // Normalisons le statut pour éviter des problèmes
-                if ($game['status'] === null || $game['status'] === '') {
-                    $game['status'] = 'unknown';
-                    error_log("Status NULL ou vide trouvé pour la partie ID: " . $game['id'] . ", normalisé en 'unknown'");
-                }
-                
-                // Si la partie est terminée, déterminer le résultat
-                // Vérifions différentes variantes de 'terminé' au cas où
-                if ($game['status'] === 'finished' || $game['status'] === 'completed' || $game['status'] === 'ended') {
-                    // Match nul ou abandon (winner_id = null ou winner_id = 0)
-                    if ($game['winner_id'] === null || $game['winner_id'] == 0) {
-                        $game['result'] = 'draw';
-                        error_log("Partie ID: " . $game['id'] . " classée comme match nul/abandon");
+                // Déterminer le résultat en fonction du champ result et du joueur
+                if ($game['status'] === 'finished' || $game['status'] === 'completed') {
+                    if ($game['result'] === 'draw') {
+                        // Vérifier si c'est vraiment un match nul ou si c'est une défaite contre l'IA
+                        if ($game['player2_id'] == 0 && $isPlayer1) {
+                            // Pour une partie contre l'IA, si le résultat est nul, c'est une défaite pour le joueur humain
+                            $game['result_for_user'] = 'loss';
+                            error_log("Partie ID: " . $game['id'] . " contre IA avec résultat draw reclassée comme défaite");
+                        } else {
+                            // Vrai match nul entre deux joueurs humains
+                            $game['result_for_user'] = 'draw';
+                            error_log("Partie ID: " . $game['id'] . " classée comme match nul");
+                        }
                     } 
-                    // Partie gagnée par l'utilisateur
-                    else if ($game['winner_id'] == $userId) {
-                        $game['result'] = 'win';
+                    else if (($isPlayer1 && $game['result'] === 'player1_won') || 
+                           (!$isPlayer1 && $game['result'] === 'player2_won')) {
+                        $game['result_for_user'] = 'win';
                         error_log("Partie ID: " . $game['id'] . " classée comme victoire pour l'utilisateur");
                     } 
-                    // Partie perdue par l'utilisateur
                     else {
-                        $game['result'] = 'loss';
+                        $game['result_for_user'] = 'loss';
                         error_log("Partie ID: " . $game['id'] . " classée comme défaite pour l'utilisateur");
                     }
                 } else {
+                    $game['result_for_user'] = 'in_progress';
                     error_log("Partie ID: " . $game['id'] . " n'est pas terminée, status: " . $game['status']);
                 }
             }
@@ -1857,7 +1880,8 @@ class GameController {
             // Convertir en entier pour s'assurer que le type est correct
             $userId = (int)$userId;
             
-            $query = "SELECT COUNT(*) FROM games WHERE player1_id = ? OR player2_id = ?";
+            // Modifier la requête pour ne compter que les parties terminées
+            $query = "SELECT COUNT(*) FROM games WHERE (player1_id = ? OR player2_id = ?) AND status = 'finished'";
             $stmt = $this->db->prepare($query);
             $stmt->bindValue(1, $userId, PDO::PARAM_INT);
             $stmt->bindValue(2, $userId, PDO::PARAM_INT);
@@ -1866,7 +1890,7 @@ class GameController {
             $count = $stmt->fetchColumn();
             
             // Log le résultat
-            error_log("countUserGames: Nombre de parties trouvées: " . $count);
+            error_log("countUserGames: Nombre de parties terminées trouvées: " . $count);
             
             return $count;
         } catch (PDOException $e) {

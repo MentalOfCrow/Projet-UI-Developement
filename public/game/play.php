@@ -12,9 +12,12 @@ error_reporting(E_ALL);
 ini_set('log_errors', 1);
 ini_set('error_log', __DIR__ . '/../../backend/logs/php_errors.log');
 
+error_log("Début du chargement de play.php");
+
 require_once __DIR__ . '/../../backend/includes/config.php';
-require_once __DIR__ . '/../../backend/controllers/GameController.php';
+require_once __DIR__ . '/../../backend/controllers/ProfileController.php';
 require_once __DIR__ . '/../../backend/includes/session.php';
+require_once __DIR__ . '/../../backend/db/Database.php';
 
 // Rediriger si l'utilisateur n'est pas connecté
 if (!Session::isLoggedIn()) {
@@ -28,17 +31,45 @@ if (!Session::isLoggedIn()) {
 $user_id = Session::getUserId();
 $username = Session::getUsername() ? Session::getUsername() : 'Joueur';
 
-// Récupérer les parties actives de l'utilisateur
-$gameController = new GameController();
-$activeGames = $gameController->getActiveGames($user_id);
+// Inclure le contrôleur de jeu une seule fois
+error_log("Inclusion du GameController");
+require_once __DIR__ . '/../../backend/controllers/GameController.php';
 
-// Récupérer les parties terminées (historique)
-$gameHistory = $gameController->readGameHistory($user_id);
+// Mettre à jour l'activité de l'utilisateur
+$profileController = new ProfileController();
+$profileController->updateActivity();
+
+// Récupérer les parties actives de l'utilisateur
+error_log("play.php - Tentative de création de GameController");
+if (!class_exists('GameController')) {
+    error_log("ERREUR: La classe GameController n'existe pas après inclusion");
+    die("Impossible de charger la classe GameController");
+} else {
+    error_log("La classe GameController existe");
+}
+
+try {
+    error_log("play.php - Avant création du GameController");
+    $gameController = new GameController();
+    error_log("play.php - GameController créé avec succès");
+    
+    error_log("play.php - Avant appel à getActiveGames() pour user_id: " . $user_id);
+    $activeGames = $gameController->getActiveGames($user_id);
+    error_log("play.php - Après appel à getActiveGames() - ActiveGames récupérés avec succès");
+} catch (Exception $e) {
+    error_log("Exception lors de la création de GameController: " . $e->getMessage());
+    error_log("play.php - Trace: " . $e->getTraceAsString());
+    echo "Erreur: " . $e->getMessage();
+}
+
+// Historique des parties temporairement désactivé
+$gameHistory = null;
 
 // Récupérer un message éventuel de redirection
 $message = isset($_GET['message']) ? htmlspecialchars($_GET['message']) : '';
 
 $pageTitle = "Jouer - " . APP_NAME;
+error_log("Fin du chargement de play.php");
 ?>
 
 <?php include __DIR__ . '/../../backend/includes/header.php'; ?>
@@ -227,6 +258,109 @@ $pageTitle = "Jouer - " . APP_NAME;
     </div>
 </div>
 
+<!-- Bouton pour afficher l'historique -->
+<div class="container mx-auto flex justify-center my-4">
+    <button id="show-history-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded flex items-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Voir l'historique des parties
+    </button>
+</div>
+
+<!-- Historique des parties -->
+<div id="history-section" class="bg-white shadow-md rounded-lg overflow-hidden mb-8 hidden">
+    <div class="p-6">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center">
+                <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mr-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <h2 class="text-xl font-bold text-gray-800">Historique des parties</h2>
+            </div>
+            <button id="hide-history" class="text-gray-500 hover:text-gray-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        
+        <div class="mb-4 overflow-auto max-h-96">
+            <?php if ($gameHistory && $gameHistory->rowCount() > 0): ?>
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Partie</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adversaire</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Résultat</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <?php while ($game = $gameHistory->fetch(PDO::FETCH_ASSOC)): ?>
+                            <?php
+                            // Déterminer si l'utilisateur est le joueur 1 ou 2
+                            $isPlayer1 = $game['player1_id'] == $user_id;
+                            
+                            // Déterminer l'adversaire
+                            $opponentName = $isPlayer1 ? $game['player2_name'] : $game['player1_name'];
+                            if ($game['player2_id'] === '0' || $game['player2_id'] === 0) {
+                                $opponentName = 'IA';
+                            }
+                            
+                            // Déterminer le résultat
+                            $result = '';
+                            $resultClass = '';
+                            
+                            if ($game['winner_id'] == $user_id) {
+                                $result = 'Victoire';
+                                $resultClass = 'bg-green-100 text-green-800';
+                            } elseif ($game['winner_id'] == '0' && $game['status'] == 'draw') {
+                                $result = 'Match nul';
+                                $resultClass = 'bg-yellow-100 text-yellow-800';
+                            } else {
+                                $result = 'Défaite';
+                                $resultClass = 'bg-red-100 text-red-800';
+                            }
+                            
+                            // Formater la date
+                            $date = new DateTime($game['updated_at']);
+                            $formattedDate = $date->format('d/m/Y H:i');
+                            ?>
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm font-medium text-gray-900">Partie #<?php echo $game['id']; ?></div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm text-gray-900"><?php echo htmlspecialchars($opponentName); ?></div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full <?php echo $resultClass; ?>">
+                                        <?php echo $result; ?>
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <?php echo $formattedDate; ?>
+                                </td>
+                            </tr>
+                        <?php endwhile; ?>
+                    </tbody>
+                </table>
+            <?php else: ?>
+                <div class="flex flex-col items-center justify-center py-8">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p class="text-gray-500 text-center">Vous n'avez aucune partie terminée.</p>
+                    <p class="text-gray-500 text-center text-sm mt-1">Jouez quelques parties pour voir votre historique ici.</p>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+
 <!-- Modal de chargement pour IA -->
 <div id="loading-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
     <div class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
@@ -255,7 +389,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Gestion du bouton d'affichage de l'historique
-    const showHistoryBtn = document.getElementById('show-history');
+    const showHistoryBtn = document.getElementById('show-history-btn');
     if (showHistoryBtn) {
         showHistoryBtn.addEventListener('click', function() {
             const historySection = document.getElementById('history-section');
@@ -265,7 +399,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     historySection.scrollIntoView({ behavior: 'smooth' });
                 }
             }
-            });
+        });
+    }
+    
+    // Gestion du bouton pour masquer l'historique
+    const hideHistoryBtn = document.getElementById('hide-history');
+    if (hideHistoryBtn) {
+        hideHistoryBtn.addEventListener('click', function() {
+            const historySection = document.getElementById('history-section');
+            if (historySection) {
+                historySection.classList.add('hidden');
+            }
+        });
     }
     
     // Fonction pour créer une partie contre l'IA
@@ -304,9 +449,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Ajouter l'écouteur d'événement
     if (playBotBtn) {
-    playBotBtn.addEventListener('click', playAgainstBot);
+        playBotBtn.addEventListener('click', playAgainstBot);
         console.log('Écouteur configuré pour le bouton IA');
-            } else {
+    } else {
         console.error('Bouton IA non trouvé');
     }
 });

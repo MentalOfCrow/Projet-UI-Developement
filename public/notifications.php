@@ -52,132 +52,119 @@ $pageTitle = "Notifications";
 include_once __DIR__ . '/../backend/includes/header.php';
 ?>
 
-<div class="container mt-4">
-    <div class="row">
-        <div class="col-12 mb-4">
-            <h1>Notifications <?php if ($unreadCount > 0): ?><span class="badge bg-danger"><?php echo $unreadCount; ?></span><?php endif; ?></h1>
-            
-            <div class="d-flex justify-content-end mb-3">
-                <a href="/game/history.php" class="btn btn-primary">
-                    <i class="fas fa-history"></i> Voir l'historique complet des parties
-                </a>
+<div class="max-w-3xl mx-auto px-4 py-8">
+    <div class="mb-6 flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-purple-800">Notifications
+            <?php if ($unreadCount > 0): ?><span class="ml-2 inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-600 text-white text-xs"><?php echo $unreadCount; ?></span><?php endif; ?></h1>
+        <a href="/game/history.php" class="inline-flex items-center text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded">
+            <i class="fas fa-history mr-2"></i> Historique des parties
+        </a>
+    </div>
+
+    <div class="bg-white shadow rounded-lg">
+        <div class="flex items-center justify-between px-4 py-3 border-b">
+            <h2 class="text-lg font-semibold">Toutes vos notifications</h2>
+            <?php if (!empty($notifications)): ?>
+            <div class="space-x-2">
+                <button onclick="markAllAsRead()" class="px-3 py-1.5 text-sm bg-green-100 hover:bg-green-200 text-green-700 rounded">Tout marquer comme lu</button>
+                <button onclick="deleteAllNotifications()" class="px-3 py-1.5 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded">Supprimer tout</button>
             </div>
+            <?php endif; ?>
+        </div>
+        <div class="p-0 divide-y" id="notif-list">
+            <?php if (empty($notifications)): ?>
+            <div class="text-center my-5">
+                <i class="fas fa-bell fa-3x text-muted mb-3"></i>
+                <p class="lead">Vous n'avez pas de notifications</p>
+            </div>
+            <?php else: ?>
+                <div class="list-group">
+                <?php foreach ($notifications as $notification): ?>
+                    <div id="notification-<?php echo htmlspecialchars($notification['id']); ?>" class="px-4 py-3 flex justify-between items-start hover:bg-gray-50 <?php echo isset($notification['read_status']) && !$notification['read_status'] ? 'bg-purple-50' : ''; ?>">
+                        <div class="flex-1">
+                            <div class="font-medium">
+                                <?php if ($notification['type'] === 'friend_request'): ?>
+                                    <i class="fas fa-user-plus text-purple-600 mr-2"></i>
+                                <?php elseif ($notification['type'] === 'friend_accepted'): ?>
+                                    <i class="fas fa-handshake text-green-600 mr-2"></i>
+                                <?php elseif ($notification['type'] === 'game_invite'): ?>
+                                    <i class="fas fa-gamepad text-yellow-500 mr-2"></i>
+                                <?php elseif ($notification['type'] === 'game_completed'): ?>
+                                    <?php if (isset($notification['data']) && isset($notification['data']['result'])): ?>
+                                        <?php if ($notification['data']['result'] === 'win'): ?>
+                                            <i class="fas fa-trophy text-green-500 mr-2"></i>
+                                        <?php elseif ($notification['data']['result'] === 'loss'): ?>
+                                            <i class="fas fa-times-circle text-red-500 mr-2"></i>
+                                        <?php else: ?>
+                                            <i class="fas fa-handshake text-yellow-500 mr-2"></i>
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        <i class="fas fa-chess-board text-indigo-500 mr-2"></i>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <i class="fas fa-bell text-indigo-500 mr-2"></i>
+                                <?php endif; ?>
+                                <?php echo htmlspecialchars($notification['message']); ?>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">
+                                <?php echo date('d/m/Y H:i', strtotime($notification['created_at'])); ?>
+                                
+                                <?php if ($notification['type'] === 'game_completed' && isset($notification['data']) && isset($notification['data']['game_id'])): ?>
+                                    <a href="/game/replay.php?game_id=<?php echo htmlspecialchars($notification['data']['game_id']); ?>" class="ml-2 text-purple-600 hover:underline">
+                                        <i class="fas fa-eye"></i> Revoir cette partie
+                                    </a>
+                                <?php endif; ?>
+                            </p>
+                        </div>
+                        <div class="flex space-x-1 ml-3">
+                            <?php if (isset($notification['read_status']) && !$notification['read_status']): ?>
+                            <button onclick="markAsRead('<?php echo htmlspecialchars($notification['id']); ?>')" class="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded" title="Marquer comme lu">
+                                <i class="fas fa-check text-gray-600 text-sm"></i>
+                            </button>
+                            <?php endif; ?>
+                            
+                            <?php 
+                            // Check if notification has data and it's a friend request
+                            if ($notification['type'] === 'friend_request' && $notification['data'] && isset($notification['data']['request_id'])): ?>
+                                <button onclick="respondToFriendRequest('<?php echo htmlspecialchars($notification['data']['request_id']); ?>', 'accept')" class="w-8 h-8 flex items-center justify-center bg-green-100 hover:bg-green-200 rounded" title="Accepter">
+                                    <i class="fas fa-check text-green-600 text-sm"></i>
+                                </button>
+                                <button onclick="respondToFriendRequest('<?php echo htmlspecialchars($notification['data']['request_id']); ?>', 'reject')" class="w-8 h-8 flex items-center justify-center bg-red-100 hover:bg-red-200 rounded" title="Refuser">
+                                    <i class="fas fa-times text-red-600 text-sm"></i>
+                                </button>
+                            <?php endif; ?>
+                            
+                            <button onclick="deleteNotification('<?php echo htmlspecialchars($notification['id']); ?>')" class="w-8 h-8 flex items-center justify-center bg-red-100 hover:bg-red-200 rounded" title="Supprimer">
+                                <i class="fas fa-trash text-red-600 text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
         </div>
         
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h2 class="mb-0">Toutes vos notifications</h2>
-                    <?php if (!empty($notifications)): ?>
-                    <div>
-                        <button onclick="markAllAsRead()" class="btn btn-outline-primary btn-sm">
-                            Tout marquer comme lu
-                        </button>
-                        <button onclick="deleteAllNotifications()" class="btn btn-outline-danger btn-sm ms-2">
-                            Supprimer tout
-                        </button>
-                    </div>
-                    <?php endif; ?>
-                </div>
-                
-                <div class="card-body">
-                    <?php if (empty($notifications)): ?>
-                    <div class="text-center my-5">
-                        <i class="fas fa-bell fa-3x text-muted mb-3"></i>
-                        <p class="lead">Vous n'avez pas de notifications</p>
-                    </div>
-                    <?php else: ?>
-                        <div class="list-group">
-                        <?php foreach ($notifications as $notification): ?>
-                            <div id="notification-<?php echo htmlspecialchars($notification['id']); ?>" class="list-group-item list-group-item-action <?php echo isset($notification['read_status']) && !$notification['read_status'] ? 'list-group-item-light' : ''; ?>">
-                                <div class="d-flex w-100 justify-content-between align-items-center">
-                                    <div>
-                                        <h5 class="mb-1">
-                                            <?php if ($notification['type'] === 'friend_request'): ?>
-                                                <i class="fas fa-user-plus text-primary me-2"></i>
-                                            <?php elseif ($notification['type'] === 'friend_accepted'): ?>
-                                                <i class="fas fa-handshake text-success me-2"></i>
-                                            <?php elseif ($notification['type'] === 'game_invite'): ?>
-                                                <i class="fas fa-gamepad text-warning me-2"></i>
-                                            <?php elseif ($notification['type'] === 'game_completed'): ?>
-                                                <?php if (isset($notification['data']) && isset($notification['data']['result'])): ?>
-                                                    <?php if ($notification['data']['result'] === 'win'): ?>
-                                                        <i class="fas fa-trophy text-success me-2"></i>
-                                                    <?php elseif ($notification['data']['result'] === 'loss'): ?>
-                                                        <i class="fas fa-times-circle text-danger me-2"></i>
-                                                    <?php else: ?>
-                                                        <i class="fas fa-handshake text-warning me-2"></i>
-                                                    <?php endif; ?>
-                                                <?php else: ?>
-                                                    <i class="fas fa-chess-board text-info me-2"></i>
-                                                <?php endif; ?>
-                                            <?php else: ?>
-                                                <i class="fas fa-bell text-info me-2"></i>
-                                            <?php endif; ?>
-                                            <?php echo htmlspecialchars($notification['message']); ?>
-                                        </h5>
-                                        <p class="mb-1 text-muted small">
-                                            <?php echo date('d/m/Y H:i', strtotime($notification['created_at'])); ?>
-                                            
-                                            <?php if ($notification['type'] === 'game_completed' && isset($notification['data']) && isset($notification['data']['game_id'])): ?>
-                                                <a href="/game/replay.php?game_id=<?php echo htmlspecialchars($notification['data']['game_id']); ?>" class="ms-2 text-primary">
-                                                    <i class="fas fa-eye"></i> Revoir cette partie
-                                                </a>
-                                            <?php endif; ?>
-                                        </p>
-                                    </div>
-                                    <div class="btn-group">
-                                        <?php if (isset($notification['read_status']) && !$notification['read_status']): ?>
-                                        <button onclick="markAsRead('<?php echo htmlspecialchars($notification['id']); ?>')" class="btn btn-sm btn-outline-secondary" title="Marquer comme lu">
-                                            <i class="fas fa-check"></i>
-                                        </button>
-                                        <?php endif; ?>
-                                        
-                                        <?php 
-                                        // Check if notification has data and it's a friend request
-                                        if ($notification['type'] === 'friend_request' && $notification['data'] && isset($notification['data']['request_id'])): ?>
-                                            <button onclick="respondToFriendRequest('<?php echo htmlspecialchars($notification['data']['request_id']); ?>', 'accept')" class="btn btn-sm btn-outline-success" title="Accepter">
-                                                <i class="fas fa-check"></i>
-                                            </button>
-                                            <button onclick="respondToFriendRequest('<?php echo htmlspecialchars($notification['data']['request_id']); ?>', 'reject')" class="btn btn-sm btn-outline-danger" title="Refuser">
-                                                <i class="fas fa-times"></i>
-                                            </button>
-                                        <?php endif; ?>
-                                        
-                                        <button onclick="deleteNotification('<?php echo htmlspecialchars($notification['id']); ?>')" class="btn btn-sm btn-outline-danger" title="Supprimer">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                
-                <?php if ($totalPages > 1): ?>
-                <div class="card-footer">
-                    <nav aria-label="Pagination des notifications">
-                        <ul class="pagination justify-content-center mb-0">
-                            <li class="page-item <?php echo ($page <= 1) ? 'disabled' : ''; ?>">
-                                <a class="page-link" href="?page=<?php echo $page - 1; ?>" tabindex="-1" aria-disabled="<?php echo ($page <= 1) ? 'true' : 'false'; ?>">Précédent</a>
-                            </li>
-                            
-                            <?php for ($i = max(1, $page - 2); $i <= min($totalPages, $page + 2); $i++): ?>
-                            <li class="page-item <?php echo ($i == $page) ? 'active' : ''; ?>">
-                                <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
-                            </li>
-                            <?php endfor; ?>
-                            
-                            <li class="page-item <?php echo ($page >= $totalPages) ? 'disabled' : ''; ?>">
-                                <a class="page-link" href="?page=<?php echo $page + 1; ?>" aria-disabled="<?php echo ($page >= $totalPages) ? 'true' : 'false'; ?>">Suivant</a>
-                            </li>
-                        </ul>
-                    </nav>
-                </div>
-                <?php endif; ?>
-            </div>
+        <?php if ($totalPages > 1): ?>
+        <div class="card-footer">
+            <nav aria-label="Pagination des notifications">
+                <ul class="pagination justify-content-center mb-0">
+                    <li class="page-item <?php echo ($page <= 1) ? 'disabled' : ''; ?>">
+                        <a class="page-link" href="?page=<?php echo $page - 1; ?>" tabindex="-1" aria-disabled="<?php echo ($page <= 1) ? 'true' : 'false'; ?>">Précédent</a>
+                    </li>
+                    
+                    <?php for ($i = max(1, $page - 2); $i <= min($totalPages, $page + 2); $i++): ?>
+                    <li class="page-item <?php echo ($i == $page) ? 'active' : ''; ?>">
+                        <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                    </li>
+                    <?php endfor; ?>
+                    
+                    <li class="page-item <?php echo ($page >= $totalPages) ? 'disabled' : ''; ?>">
+                        <a class="page-link" href="?page=<?php echo $page + 1; ?>" aria-disabled="<?php echo ($page >= $totalPages) ? 'true' : 'false'; ?>">Suivant</a>
+                    </li>
+                </ul>
+            </nav>
         </div>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -194,7 +181,7 @@ function markAsRead(notificationId) {
     .then(data => {
         if (data.success) {
             // Remove the background color
-            document.getElementById(`notification-${notificationId}`).classList.remove('list-group-item-light');
+            document.getElementById(`notification-${notificationId}`).classList.remove('bg-purple-50');
             
             // Hide the mark as read button
             const markAsReadBtn = document.getElementById(`notification-${notificationId}`).querySelector('button[title="Marquer comme lu"]');
@@ -226,8 +213,8 @@ function markAllAsRead() {
     .then(data => {
         if (data.success) {
             // Remove all background colors
-            document.querySelectorAll('.list-group-item-light').forEach(el => {
-                el.classList.remove('list-group-item-light');
+            document.querySelectorAll('.bg-purple-50').forEach(el => {
+                el.classList.remove('bg-purple-50');
             });
             
             // Hide all mark as read buttons

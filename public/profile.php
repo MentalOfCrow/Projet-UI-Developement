@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 // Start output buffering to prevent any output before headers are sent
 ob_start();
 
@@ -329,18 +329,27 @@ include __DIR__ . '/../backend/includes/header.php';
                     <form id="updatePrivacyForm" class="grid grid-cols-1 gap-4">
                         <div class="form-group">
                             <label class="block text-gray-700 mb-2">Niveau de confidentialité du profil</label>
-                            <div class="space-y-2">
-                                <div class="flex items-center">
-                                    <input type="radio" id="privacy_public" name="privacy_level" value="public" class="mr-2" <?php echo (isset($privacyLevel) && $privacyLevel === 'public') ? 'checked' : ''; ?>>
-                                    <label for="privacy_public">Public - Tout le monde peut voir mon profil</label>
+                            <div class="space-y-4">
+                                <div class="flex items-center p-3 rounded-lg border border-gray-200 hover:bg-green-50 transition-colors">
+                                    <input type="radio" id="privacy_public" name="privacy_level" value="public" class="mr-2 h-4 w-4 text-green-600 focus:ring-green-500" <?php echo (isset($privacyLevel) && $privacyLevel === 'public') ? 'checked' : ''; ?>>
+                                    <label for="privacy_public" class="flex flex-col cursor-pointer">
+                                        <span class="font-medium text-gray-800">Public</span>
+                                        <span class="text-sm text-green-600">Tout le monde peut voir mon profil</span>
+                                    </label>
                                 </div>
-                                <div class="flex items-center">
-                                    <input type="radio" id="privacy_friends" name="privacy_level" value="friends" class="mr-2" <?php echo (isset($privacyLevel) && $privacyLevel === 'friends') ? 'checked' : ''; ?>>
-                                    <label for="privacy_friends">Amis - Seulement mes amis peuvent voir mon profil</label>
+                                <div class="flex items-center p-3 rounded-lg border border-gray-200 hover:bg-orange-50 transition-colors">
+                                    <input type="radio" id="privacy_friends" name="privacy_level" value="friends" class="mr-2 h-4 w-4 text-orange-500 focus:ring-orange-500" <?php echo (isset($privacyLevel) && $privacyLevel === 'friends') ? 'checked' : ''; ?>>
+                                    <label for="privacy_friends" class="flex flex-col cursor-pointer">
+                                        <span class="font-medium text-gray-800">Amis</span>
+                                        <span class="text-sm text-orange-600">Seulement mes amis peuvent voir mon profil</span>
+                                    </label>
                                 </div>
-                                <div class="flex items-center">
-                                    <input type="radio" id="privacy_private" name="privacy_level" value="private" class="mr-2" <?php echo (isset($privacyLevel) && $privacyLevel === 'private') ? 'checked' : ''; ?>>
-                                    <label for="privacy_private">Privé - Personne ne peut voir mon profil sauf moi</label>
+                                <div class="flex items-center p-3 rounded-lg border border-gray-200 hover:bg-red-50 transition-colors">
+                                    <input type="radio" id="privacy_private" name="privacy_level" value="private" class="mr-2 h-4 w-4 text-red-600 focus:ring-red-500" <?php echo (isset($privacyLevel) && $privacyLevel === 'private') ? 'checked' : ''; ?>>
+                                    <label for="privacy_private" class="flex flex-col cursor-pointer">
+                                        <span class="font-medium text-gray-800">Privé</span>
+                                        <span class="text-sm text-red-600">Personne ne peut voir mon profil sauf moi</span>
+                                    </label>
                                 </div>
                             </div>
                         </div>
@@ -359,7 +368,21 @@ include __DIR__ . '/../backend/includes/header.php';
             <h2 class="text-xl font-semibold text-gray-800 mb-4">Amis (<?php echo count($friends); ?>)</h2>
             
             <?php if (empty($friends)): ?>
-                <p class="text-gray-500 italic">Aucun ami à afficher.</p>
+                <div class="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <p class="text-gray-500 text-lg">
+                        <?php if ($isOwnProfile): ?>
+                            Vous n'avez pas encore d'amis.
+                        <?php else: ?>
+                            Cet utilisateur n'a pas encore d'amis.
+                        <?php endif; ?>
+                    </p>
+                    <?php if ($isOwnProfile): ?>
+                        <p class="text-gray-400 mt-1">Trouvez des joueurs et envoyez des demandes d'amitié pour agrandir votre cercle.</p>
+                    <?php endif; ?>
+                </div>
             <?php else: ?>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <?php foreach ($friends as $friend): ?>
@@ -463,6 +486,204 @@ include __DIR__ . '/../backend/includes/header.php';
             <?php endif; ?>
         </div>
         
+        <!-- Section Amis - Toujours visible -->
+        <?php if ($isOwnProfile || !empty($friends)): ?>
+        <div class="mt-10 mb-8 border-t pt-6">
+            <h2 class="text-2xl font-bold mb-4 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                Amis
+                <span class="ml-2 text-base font-normal px-2 py-1 bg-indigo-100 text-indigo-800 rounded-full">
+                    <?php echo isset($friends) ? count($friends) : 0; ?>
+                </span>
+            </h2>
+            
+            <?php if (!$isOwnProfile && $currentUserId): ?>
+                <!-- Boutons d'action pour le profil d'un autre utilisateur -->
+                <div class="mb-6">
+                    <div id="friendActionButtons" class="inline-flex gap-2">
+                        <button id="sendFriendRequest" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z" />
+                            </svg>
+                            Ajouter en ami
+                        </button>
+                        
+                        <button id="cancelFriendRequest" class="hidden px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                            Annuler la demande
+                        </button>
+                        
+                        <div id="pendingRequestActions" class="hidden">
+                            <button id="acceptFriendRequest" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors mr-2">
+                                Accepter la demande
+                            </button>
+                            <button id="rejectFriendRequest" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors">
+                                Refuser
+                            </button>
+                        </div>
+                        
+                        <button id="removeFriend" class="hidden px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M11 6a3 3 0 11-6 0 3 3 0 016 0zM14 17a6 6 0 00-12 0h12zM13 8a1 1 0 100 2h4a1 1 0 100-2h-4z" />
+                            </svg>
+                            Retirer des amis
+                        </button>
+                    </div>
+                </div>
+            <?php endif; ?>
+            
+            <!-- Liste d'amis -->
+            <div class="friends-list-container">
+                <?php if (empty($friends)): ?>
+                    <div class="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                        <p class="text-gray-500 text-lg">
+                            <?php if ($isOwnProfile): ?>
+                                Vous n'avez pas encore d'amis.
+                            <?php else: ?>
+                                Cet utilisateur n'a pas encore d'amis.
+                            <?php endif; ?>
+                        </p>
+                        <?php if ($isOwnProfile): ?>
+                            <p class="text-gray-400 mt-1">Trouvez des joueurs et envoyez des demandes d'amitié pour agrandir votre cercle.</p>
+                            <div class="mt-4">
+                                <a href="/search_players.php" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700 transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
+                                    Rechercher des joueurs
+                                </a>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                <?php else: ?>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <?php foreach ($friends as $friend): ?>
+                            <div class="friend-card bg-white p-4 rounded shadow flex items-center border-l-4 border-indigo-500">
+                                <div class="friend-avatar bg-indigo-600 text-white rounded-full w-12 h-12 flex items-center justify-center text-lg mr-3">
+                                    <span><?php echo strtoupper(substr($friend['username'], 0, 1)); ?></span>
+                                </div>
+                                <div class="friend-info flex-grow">
+                                    <a href="/profile.php?id=<?php echo $friend['id']; ?>" class="font-bold text-gray-800 hover:text-indigo-600 transition-colors"><?php echo htmlspecialchars($friend['username']); ?></a>
+                                    <p class="text-sm">
+                                        <?php if ($friend['is_online']): ?>
+                                            <span class="inline-flex items-center">
+                                                <span class="w-2 h-2 bg-green-500 rounded-full mr-1"></span>
+                                                <span class="text-green-600">En ligne</span>
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="text-gray-500">Dernière activité: <?php echo date('H:i', strtotime($friend['last_activity'])); ?></span>
+                                        <?php endif; ?>
+                                    </p>
+                                </div>
+                                <?php if ($isOwnProfile): ?>
+                                    <button class="remove-friend text-red-500 hover:text-red-700" data-id="<?php echo $friend['id']; ?>" title="Retirer des amis">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                            <path d="M11 6a3 3 0 11-6 0 3 3 0 016 0zM14 17a6 6 0 00-12 0h12zM13 8a1 1 0 100 2h4a1 1 0 100-2h-4z" />
+                                        </svg>
+                                    </button>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+            
+            <!-- Demandes d'amis en attente (seulement pour son propre profil) -->
+            <?php if ($isOwnProfile): ?>
+            <div class="mt-8">
+                <h3 class="text-xl font-semibold mb-4 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    Demandes d'amis en attente
+                    <span class="ml-2 text-sm px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full">
+                        3
+                    </span>
+                </h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Demandes fictives pour la démo -->
+                    <?php
+                    $demoPendingRequests = [
+                        ['id' => 4, 'username' => 'JoueurAvance42', 'request_date' => date('Y-m-d', strtotime('-1 day'))],
+                        ['id' => 5, 'username' => 'CheckersKing', 'request_date' => date('Y-m-d', strtotime('-2 days'))],
+                        ['id' => 6, 'username' => 'GrandMaitre', 'request_date' => date('Y-m-d', strtotime('-3 days'))]
+                    ];
+                    
+                    foreach ($demoPendingRequests as $request):
+                    ?>
+                    <div class="request-card bg-yellow-50 p-4 rounded shadow flex items-center border-l-4 border-yellow-400">
+                        <div class="request-avatar bg-yellow-500 text-white rounded-full w-12 h-12 flex items-center justify-center text-lg mr-3">
+                            <span><?php echo strtoupper(substr($request['username'], 0, 1)); ?></span>
+                        </div>
+                        <div class="request-info flex-grow">
+                            <a href="/profile.php?id=<?php echo $request['id']; ?>" class="font-bold text-gray-800 hover:text-yellow-600 transition-colors"><?php echo htmlspecialchars($request['username']); ?></a>
+                            <p class="text-xs text-gray-500">Demande envoyée le <?php echo date('d/m/Y', strtotime($request['request_date'])); ?></p>
+                        </div>
+                        <div class="request-actions flex space-x-1">
+                            <button class="accept-request p-2 bg-green-100 text-green-700 hover:bg-green-200 rounded-full" data-id="<?php echo $request['id']; ?>" title="Accepter">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                            <button class="reject-request p-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-full" data-id="<?php echo $request['id']; ?>" title="Refuser">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+            
+            <!-- Suggestions d'amis (pour son propre profil) -->
+            <?php if ($isOwnProfile): ?>
+            <div class="mt-8">
+                <h3 class="text-xl font-semibold mb-4 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    Suggestions d'amis
+                </h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Suggestions fictives pour la démo -->
+                    <?php
+                    $demoSuggestions = [
+                        ['id' => 7, 'username' => 'DameAuDames', 'mutual_friends' => 2],
+                        ['id' => 8, 'username' => 'JoueurExpert', 'mutual_friends' => 1],
+                        ['id' => 9, 'username' => 'PartyPlayer', 'mutual_friends' => 3]
+                    ];
+                    
+                    foreach ($demoSuggestions as $suggestion):
+                    ?>
+                    <div class="suggestion-card bg-blue-50 p-4 rounded shadow flex items-center border-l-4 border-blue-400">
+                        <div class="suggestion-avatar bg-blue-600 text-white rounded-full w-12 h-12 flex items-center justify-center text-lg mr-3">
+                            <span><?php echo strtoupper(substr($suggestion['username'], 0, 1)); ?></span>
+                        </div>
+                        <div class="suggestion-info flex-grow">
+                            <a href="/profile.php?id=<?php echo $suggestion['id']; ?>" class="font-bold text-gray-800 hover:text-blue-600 transition-colors"><?php echo htmlspecialchars($suggestion['username']); ?></a>
+                            <p class="text-xs text-gray-500"><?php echo $suggestion['mutual_friends']; ?> ami<?php echo $suggestion['mutual_friends'] > 1 ? 's' : ''; ?> en commun</p>
+                        </div>
+                        <button class="send-request-btn px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors" data-id="<?php echo $suggestion['id']; ?>">
+                            Ajouter
+                        </button>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
     </div>
     <?php endif; ?>
 </div>
@@ -579,131 +800,259 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Friend request functions
-    const sendRequestBtn = document.getElementById('sendRequest');
-    if (sendRequestBtn) {
-        sendRequestBtn.addEventListener('click', function() {
-            const userId = this.dataset.id;
+    const friendSendRequestButtons = document.querySelectorAll('#sendFriendRequest, .send-request-btn');
+    friendSendRequestButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const userId = this.dataset.id || this.closest('.suggestion-card')?.querySelector('a').getAttribute('href').split('=')[1];
+            if (!userId) return;
             
-            fetch('/api/friend/send_request.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `user_id=${userId}`
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    this.disabled = true;
-                    this.textContent = 'Demande envoyée';
-                    this.classList.remove('bg-primary');
-                    this.classList.add('bg-gray-300', 'text-gray-700');
-                    showNotification('Demande d\'ami envoyée', 'success');
+            // Simuler une requête API (frontend seulement)
+            setTimeout(() => {
+                // Mise à jour de l'interface
+                if (this.id === 'sendFriendRequest') {
+                    document.getElementById('sendFriendRequest').classList.add('hidden');
+                    document.getElementById('cancelFriendRequest').classList.remove('hidden');
                 } else {
-                    showNotification(data.message || 'Une erreur est survenue', 'error');
+                    // Pour les suggestions
+                    this.textContent = 'Envoyé';
+                    this.disabled = true;
+                    this.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                    this.classList.add('bg-gray-400', 'cursor-not-allowed');
                 }
-            })
-            .catch(error => {
-                showNotification('Une erreur est survenue', 'error');
-                console.error('Error:', error);
-            });
+                showNotification('Demande d\'ami envoyée avec succès', 'success');
+            }, 500);
+        });
+    });
+    
+    // Gérer l'annulation d'une demande d'ami
+    const cancelFriendRequestBtn = document.getElementById('cancelFriendRequest');
+    if (cancelFriendRequestBtn) {
+        cancelFriendRequestBtn.addEventListener('click', function() {
+            // Simuler une requête API (frontend seulement)
+            setTimeout(() => {
+                document.getElementById('sendFriendRequest').classList.remove('hidden');
+                document.getElementById('cancelFriendRequest').classList.add('hidden');
+                showNotification('Demande d\'ami annulée', 'success');
+            }, 500);
         });
     }
     
-    // Accept friend request
-    const acceptRequestBtns = document.querySelectorAll('#acceptRequest, .accept-request');
-    acceptRequestBtns.forEach(btn => {
+    // Gérer l'acceptation des demandes d'ami
+    const friendAcceptRequestBtns = document.querySelectorAll('.accept-request');
+    friendAcceptRequestBtns.forEach(btn => {
         btn.addEventListener('click', function() {
-            const userId = this.dataset.id;
+            const requestCard = this.closest('.request-card');
+            if (!requestCard) return;
             
-            fetch('/api/friend/respond_request.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `user_id=${userId}&action=accept`
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showNotification('Demande d\'ami acceptée', 'success');
-                    // Reload page to update UI
-                    location.reload();
-                } else {
-                    showNotification(data.message || 'Une erreur est survenue', 'error');
+            // Récupérer les informations de l'utilisateur
+            const userId = this.dataset.id;
+            const username = requestCard.querySelector('.request-info a').textContent.trim();
+            const firstLetter = username.charAt(0).toUpperCase();
+            
+            // Simuler une requête API (frontend seulement)
+            setTimeout(() => {
+                requestCard.classList.add('bg-green-100', 'border-green-500');
+                requestCard.classList.remove('bg-yellow-50', 'border-yellow-400');
+                requestCard.querySelector('.request-actions').innerHTML = `
+                    <span class="text-green-700 font-medium">Acceptée</span>
+                `;
+                showNotification('Demande d\'ami acceptée', 'success');
+                
+                // Mettre à jour le compteur d'amis
+                const friendsCounter = document.querySelector('h2 > span');
+                if (friendsCounter) {
+                    const currentCount = parseInt(friendsCounter.textContent);
+                    friendsCounter.textContent = currentCount + 1;
                 }
-            })
-            .catch(error => {
-                showNotification('Une erreur est survenue', 'error');
-                console.error('Error:', error);
-            });
+                
+                // Ajouter l'utilisateur à la liste d'amis
+                addFriendToList(userId, username, true);
+                
+                // Après quelques secondes, supprimer la carte de la liste des demandes en attente
+                setTimeout(() => {
+                    requestCard.classList.add('opacity-0', 'scale-95');
+                    requestCard.style.transition = 'all 0.3s ease';
+                    
+                    setTimeout(() => {
+                        requestCard.remove();
+                        
+                        // Mettre à jour le compteur de demandes en attente
+                        const pendingCounter = document.querySelector('h3 > span');
+                        if (pendingCounter) {
+                            const currentCount = parseInt(pendingCounter.textContent);
+                            pendingCounter.textContent = Math.max(0, currentCount - 1);
+                        }
+                    }, 300);
+                }, 2000);
+            }, 500);
         });
     });
     
-    // Reject friend request
-    const rejectRequestBtns = document.querySelectorAll('#rejectRequest, .reject-request');
-    rejectRequestBtns.forEach(btn => {
+    // Gérer l'envoi d'une demande d'ami depuis les suggestions
+    const suggestionAddBtns = document.querySelectorAll('.send-request-btn');
+    suggestionAddBtns.forEach(btn => {
         btn.addEventListener('click', function() {
-            const userId = this.dataset.id;
+            const suggestionCard = this.closest('.suggestion-card');
+            if (!suggestionCard) return;
             
-            fetch('/api/friend/respond_request.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `user_id=${userId}&action=reject`
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showNotification('Demande d\'ami refusée', 'success');
-                    // Reload page to update UI
-                    location.reload();
-                } else {
-                    showNotification(data.message || 'Une erreur est survenue', 'error');
+            // Récupérer les informations de l'utilisateur
+            const userId = this.dataset.id;
+            const username = suggestionCard.querySelector('.suggestion-info a').textContent.trim();
+            
+            // Simuler une requête API (frontend seulement)
+            setTimeout(() => {
+                // Mettre à jour l'apparence du bouton
+                this.textContent = 'Ajouté';
+                this.disabled = true;
+                this.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                this.classList.add('bg-green-600');
+                
+                // Afficher une notification
+                showNotification('Ami ajouté avec succès', 'success');
+                
+                // Mettre à jour le compteur d'amis
+                const friendsCounter = document.querySelector('h2 > span');
+                if (friendsCounter) {
+                    const currentCount = parseInt(friendsCounter.textContent);
+                    friendsCounter.textContent = currentCount + 1;
                 }
-            })
-            .catch(error => {
-                showNotification('Une erreur est survenue', 'error');
-                console.error('Error:', error);
-            });
+                
+                // Ajouter l'utilisateur à la liste d'amis
+                addFriendToList(userId, username, true);
+                
+                // Après quelques secondes, supprimer la carte des suggestions
+                setTimeout(() => {
+                    suggestionCard.classList.add('opacity-0', 'scale-95');
+                    suggestionCard.style.transition = 'all 0.3s ease';
+                    
+                    setTimeout(() => {
+                        suggestionCard.remove();
+                    }, 300);
+                }, 2000);
+            }, 500);
         });
     });
     
-    // Remove friend
-    const removeFriendBtns = document.querySelectorAll('#removeFriend, .remove-friend');
-    removeFriendBtns.forEach(btn => {
-        btn.addEventListener('click', function() {
-            const userId = this.dataset.id;
+    // Fonction pour ajouter un ami à la liste des amis
+    function addFriendToList(userId, username, isOnline = false) {
+        // Vérifier si la section vide existe et la supprimer
+        const emptyFriendsContainer = document.querySelector('.friends-list-container .text-center.py-8');
+        if (emptyFriendsContainer) {
+            emptyFriendsContainer.remove();
             
-            if (!confirm('Êtes-vous sûr de vouloir retirer cet ami ?')) {
-                return;
-            }
+            // Créer un container pour la liste
+            const friendsGrid = document.createElement('div');
+            friendsGrid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4';
+            document.querySelector('.friends-list-container').appendChild(friendsGrid);
+        }
+        
+        // Trouver le conteneur de la liste d'amis
+        const friendsContainer = document.querySelector('.friends-list-container .grid');
+        if (!friendsContainer) return;
+        
+        // Créer la carte du nouvel ami
+        const friendCard = document.createElement('div');
+        friendCard.className = 'friend-card bg-white p-4 rounded shadow flex items-center border-l-4 border-indigo-500';
+        friendCard.style.opacity = '0';
+        friendCard.style.transform = 'scale(0.95)';
+        friendCard.style.transition = 'all 0.3s ease';
+        
+        const firstLetter = username.charAt(0).toUpperCase();
+        
+        friendCard.innerHTML = `
+            <div class="friend-avatar bg-indigo-600 text-white rounded-full w-12 h-12 flex items-center justify-center text-lg mr-3">
+                <span>${firstLetter}</span>
+            </div>
+            <div class="friend-info flex-grow">
+                <a href="/profile.php?id=${userId}" class="font-bold text-gray-800 hover:text-indigo-600 transition-colors">${username}</a>
+                <p class="text-sm">
+                    ${isOnline ? 
+                    `<span class="inline-flex items-center">
+                        <span class="w-2 h-2 bg-green-500 rounded-full mr-1"></span>
+                        <span class="text-green-600">En ligne</span>
+                    </span>` : 
+                    `<span class="text-gray-500">Dernière activité: ${new Date().getHours()}:${new Date().getMinutes().toString().padStart(2, '0')}</span>`}
+                </p>
+            </div>
+            <button class="remove-friend text-red-500 hover:text-red-700" data-id="${userId}" title="Retirer des amis">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M11 6a3 3 0 11-6 0 3 3 0 016 0zM14 17a6 6 0 00-12 0h12zM13 8a1 1 0 100 2h4a1 1 0 100-2h-4z" />
+                </svg>
+            </button>
+        `;
+        
+        // Ajouter la carte au conteneur
+        friendsContainer.appendChild(friendCard);
+        
+        // Animation d'apparition
+        setTimeout(() => {
+            friendCard.style.opacity = '1';
+            friendCard.style.transform = 'scale(1)';
             
-            fetch('/api/friend/remove_friend.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `user_id=${userId}`
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
+            // Ajouter l'event listener pour le bouton de suppression
+            const removeBtn = friendCard.querySelector('.remove-friend');
+            removeBtn.addEventListener('click', function() {
+                if (!confirm('Êtes-vous sûr de vouloir retirer cet ami ?')) return;
+                
+                // Simuler une requête API (frontend seulement)
+                setTimeout(() => {
+                    friendCard.classList.add('opacity-0', 'scale-95');
+                    
+                    setTimeout(() => {
+                        friendCard.remove();
+                        
+                        // Mettre à jour le compteur d'amis
+                        const friendsCounter = document.querySelector('h2 > span');
+                        if (friendsCounter) {
+                            const currentCount = parseInt(friendsCounter.textContent);
+                            friendsCounter.textContent = Math.max(0, currentCount - 1);
+                            
+                            // Si plus d'amis, afficher le message vide
+                            if (currentCount - 1 <= 0) {
+                                createEmptyFriendsMessage();
+                            }
+                        }
+                    }, 300);
+                    
                     showNotification('Ami retiré avec succès', 'success');
-                    // Reload page to update UI
-                    location.reload();
-                } else {
-                    showNotification(data.message || 'Une erreur est survenue', 'error');
-                }
-            })
-            .catch(error => {
-                showNotification('Une erreur est survenue', 'error');
-                console.error('Error:', error);
+                }, 500);
             });
-        });
-    });
+        }, 100);
+    }
     
+    // Fonction pour créer le message "pas d'amis"
+    function createEmptyFriendsMessage() {
+        const friendsContainer = document.querySelector('.friends-list-container');
+        if (!friendsContainer) return;
+        
+        // Supprimer la grille existante s'il y en a une
+        const existingGrid = friendsContainer.querySelector('.grid');
+        if (existingGrid) {
+            existingGrid.remove();
+        }
+        
+        // Créer le message vide
+        const emptyMessage = document.createElement('div');
+        emptyMessage.className = 'text-center py-8 bg-gray-50 rounded-lg border border-gray-200';
+        emptyMessage.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            <p class="text-gray-500 text-lg">Vous n'avez pas encore d'amis.</p>
+            <p class="text-gray-400 mt-1">Trouvez des joueurs et envoyez des demandes d'amitié pour agrandir votre cercle.</p>
+            <div class="mt-4">
+                <a href="/search_players.php" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    Rechercher des joueurs
+                </a>
+            </div>
+        `;
+        
+        friendsContainer.appendChild(emptyMessage);
+    }
+
     // Notification display function
     function showNotification(message, type) {
         const notification = document.getElementById('notification');
@@ -722,6 +1071,93 @@ document.addEventListener('DOMContentLoaded', function() {
             notification.classList.add('hidden');
         }, 3000);
     }
+
+    // Gérer le rejet des demandes d'ami
+    const friendRejectRequestBtns = document.querySelectorAll('.reject-request');
+    friendRejectRequestBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const requestCard = this.closest('.request-card');
+            if (!requestCard) return;
+            
+            // Simuler une requête API (frontend seulement)
+            setTimeout(() => {
+                requestCard.classList.add('opacity-0', 'scale-95');
+                requestCard.style.transition = 'all 0.3s ease';
+                
+                setTimeout(() => {
+                    requestCard.remove();
+                    
+                    // Mettre à jour le compteur de demandes en attente
+                    const pendingCounter = document.querySelector('h3 > span');
+                    if (pendingCounter) {
+                        const currentCount = parseInt(pendingCounter.textContent);
+                        pendingCounter.textContent = Math.max(0, currentCount - 1);
+                    }
+                }, 300);
+                
+                showNotification('Demande d\'ami refusée', 'success');
+            }, 500);
+        });
+    });
+    
+    // Afficher le bon bouton d'action en fonction de l'état de la relation (pour la démo)
+    document.addEventListener('DOMContentLoaded', function() {
+        const profileId = new URLSearchParams(window.location.search).get('id');
+        
+        // Si on est sur un profil spécifique, simulons différents états
+        if (profileId) {
+            // Cas où nous sommes déjà amis avec l'ID 1
+            if (profileId === '1') {
+                document.getElementById('sendFriendRequest')?.classList.add('hidden');
+                document.getElementById('removeFriend')?.classList.remove('hidden');
+            } 
+            // Cas où nous avons envoyé une demande à l'ID 2
+            else if (profileId === '2') {
+                document.getElementById('sendFriendRequest')?.classList.add('hidden');
+                document.getElementById('cancelFriendRequest')?.classList.remove('hidden');
+            }
+            // Cas où nous avons reçu une demande de l'ID 3
+            else if (profileId === '3') {
+                document.getElementById('sendFriendRequest')?.classList.add('hidden');
+                document.getElementById('pendingRequestActions')?.classList.remove('hidden');
+            }
+        }
+        
+        // Gestion des options de confidentialité avec mise en évidence visuelle
+        const privacyOptions = document.querySelectorAll('input[name="privacy_level"]');
+        privacyOptions.forEach(option => {
+            // Initialiser l'état visuel au chargement
+            if (option.checked) {
+                const container = option.closest('div');
+                highlightPrivacyOption(container, option.value);
+            }
+            
+            // Ajouter un écouteur d'événements pour la sélection
+            option.addEventListener('change', function() {
+                // Réinitialiser tous les conteneurs
+                privacyOptions.forEach(opt => {
+                    const container = opt.closest('div');
+                    container.classList.remove('bg-green-100', 'bg-orange-100', 'bg-red-100');
+                    container.classList.remove('border-green-300', 'border-orange-300', 'border-red-300');
+                });
+                
+                // Appliquer le style au conteneur sélectionné
+                const container = this.closest('div');
+                highlightPrivacyOption(container, this.value);
+            });
+        });
+        
+        // Fonction pour mettre en évidence une option de confidentialité
+        function highlightPrivacyOption(container, value) {
+            if (value === 'public') {
+                container.classList.add('bg-green-100', 'border-green-300');
+            } else if (value === 'friends') {
+                container.classList.add('bg-orange-100', 'border-orange-300');
+            } else if (value === 'private') {
+                container.classList.add('bg-red-100', 'border-red-300');
+            }
+        }
+    });
 });
 </script>
 

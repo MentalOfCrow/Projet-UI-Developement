@@ -208,6 +208,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Charger les données actuelles
 $data = loadData();
 
+// -------------------------------------------------------------------------
+// AJOUT : garantir que l'utilisateur connecté figure dans le classement
+// -------------------------------------------------------------------------
+if (Session::isLoggedIn()) {
+    $currentUserId = Session::getUserId();
+
+    // Vérifier si l'utilisateur existe déjà dans le tableau $data['players']
+    $found = false;
+    foreach ($data['players'] as $p) {
+        if (isset($p['id']) && $p['id'] == $currentUserId) {
+            $found = true;
+            break;
+        }
+    }
+
+    if (!$found) {
+        // Récupérer les stats depuis JsonDatabase
+        $userStats = $jsonDb->getUserStats($currentUserId);
+        $user = $jsonDb->getUserById($currentUserId);
+
+        $data['players'][] = [
+            'id'           => $currentUserId,
+            'username'     => $user['username'] ?? ('Utilisateur #' . $currentUserId),
+            'avatar'       => null,
+            'rating'       => is_array($userStats) && isset($userStats['rating']) ? $userStats['rating'] : 1500,
+            'games_played' => is_array($userStats) && isset($userStats['games_played']) ? $userStats['games_played'] : 0,
+            'wins'         => is_array($userStats) && isset($userStats['games_won']) ? $userStats['games_won'] : 0,
+            'losses'       => is_array($userStats) && isset($userStats['games_lost']) ? $userStats['games_lost'] : 0,
+            'draws'        => is_array($userStats) && isset($userStats['draws']) ? $userStats['draws'] : 0,
+        ];
+    }
+}
+
 // Trier les joueurs par classement (du plus élevé au plus bas)
 usort($data['players'], function($a, $b) {
     return $b['rating'] - $a['rating'];

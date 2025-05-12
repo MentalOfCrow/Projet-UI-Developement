@@ -1,7 +1,10 @@
 {
-    "next_user_id": 3,
+    "next_user_id": 6,
     "usernames": {
         "c": 1,
-        "d": 2
+        "d": 2,
+        "m": 3,
+        "j": 4,
+        "h": 5
     }
 }

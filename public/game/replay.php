@@ -475,8 +475,15 @@ function updateUI() {
     document.querySelectorAll('#movesList .move-item').forEach(item => {
         if (parseInt(item.dataset.index) === currentMoveIndex) {
             item.classList.add('active');
-            // Faire défiler jusqu'à l'élément actif
-            item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            // Faire défiler uniquement dans le conteneur movesList sans déplacer la page entière
+            const container = document.querySelector('#movesList').parentElement;
+            const offsetTop = item.offsetTop;
+            const containerHeight = container.clientHeight;
+            // Centrer l'élément actif si nécessaire
+            container.scrollTo({
+                top: offsetTop - containerHeight / 2,
+                behavior: 'smooth'
+            });
         } else {
             item.classList.remove('active');
         }

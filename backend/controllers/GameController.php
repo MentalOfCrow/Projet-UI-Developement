@@ -180,7 +180,7 @@ class GameController {
             
             // Si l'adversaire est un bot (identifié par player2_id = 0), définir un nom pour le bot
             if ($game['player2_id'] === '0' || $game['player2_id'] === 0) {
-                $game['player2_name'] = 'IA';
+                $game['player2_name'] = 'Joueur';
             }
             
             // Si l'historique est demandé, récupérer les mouvements

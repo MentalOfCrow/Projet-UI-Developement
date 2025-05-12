@@ -181,7 +181,28 @@ class MatchmakingController {
             $stmt = $this->db->prepare("SELECT TIMESTAMPDIFF(SECOND, joined_at, NOW()) as wait_time FROM queue WHERE user_id = ?");
             $stmt->execute([$user_id]);
             $waitInfo = $stmt->fetch(PDO::FETCH_ASSOC);
-            
+
+            // -------------------------------------------------------
+            // Si l'attente dépasse 15 secondes, lancer une partie vs IA
+            // -------------------------------------------------------
+            if (($waitInfo['wait_time'] ?? 0) >= 15) {
+                // Retirer le joueur de la file d'attente avant de créer la partie
+                $this->removeFromQueue($user_id);
+
+                // Créer une partie contre un bot (player2_id = 0)
+                $botGame = $this->gameController->createBotGame($user_id);
+
+                if ($botGame['success']) {
+                    return [
+                        'success' => true,
+                        'matched' => true,
+                        'game_id' => $botGame['game_id'],
+                        'message' => 'Adversaire trouvé ! Redirection vers le plateau de jeu...'
+                    ];
+                }
+                // Si la création échoue, continuer comme si aucun adversaire n'était trouvé
+            }
+
             return [
                 'success' => true,
                 'matched' => false,

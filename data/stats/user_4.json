@@ -1,0 +1,10 @@
+{
+    "user_id": 4,
+    "games_played": 0,
+    "games_won": 0,
+    "games_lost": 0,
+    "draws": 0,
+    "rating": 1500,
+    "rank": null,
+    "last_game_date": null
+}

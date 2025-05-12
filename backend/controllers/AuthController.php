@@ -29,6 +29,7 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once __DIR__ . '/../models/User.php';
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../db/Database.php';
+require_once __DIR__ . '/../db/JsonDatabase.php';
 
 class AuthController {
     private $user;
@@ -56,17 +57,23 @@ class AuthController {
                 return ["success" => false, "message" => "Le mot de passe doit contenir au moins 6 caractères."];
             }
             
+            // Obtenir l'instance de JsonDatabase
+            $db = JsonDatabase::getInstance();
+            
             // Vérification si l'utilisateur existe déjà
-            $this->user->username = $username;
-            if ($this->user->usernameExists()) {
+            if ($db->getUserByUsername($username)) {
                 return ["success" => false, "message" => "Ce nom d'utilisateur est déjà pris."];
             }
             
             // Création de l'utilisateur
-            $this->user->password = $password;
-            $this->user->email = $email;
+            $userData = [
+                'username' => $username,
+                'email' => $email,
+                'password' => password_hash($password, PASSWORD_BCRYPT, ['cost' => HASH_COST]),
+                'created_at' => date('Y-m-d H:i:s')
+            ];
             
-            if ($this->user->create()) {
+            if ($db->saveUser($userData)) {
                 return ["success" => true, "message" => "Inscription réussie. Vous pouvez maintenant vous connecter."];
             } else {
                 return ["success" => false, "message" => "Une erreur est survenue. Veuillez réessayer."];

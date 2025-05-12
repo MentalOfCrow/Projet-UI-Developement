@@ -1,0 +1,10 @@
+{
+    "user_id": 5,
+    "games_played": 3,
+    "games_won": 1,
+    "games_lost": 1,
+    "draws": 1,
+    "rating": 1500,
+    "rank": null,
+    "last_game_date": "2025-05-12 08:07:52"
+}

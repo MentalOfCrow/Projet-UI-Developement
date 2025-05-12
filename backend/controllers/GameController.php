@@ -79,6 +79,11 @@ class GameController {
             if ($stmt->execute()) {
                 $gameId = $this->db->lastInsertId();
                 
+                // Mettre à jour l'index JSON des parties
+                $jsonDb = JsonDatabase::getInstance();
+                $jsonDb->updateGamesIndex($data['player1_id'], $gameId);
+                $jsonDb->updateGamesIndex($data['player2_id'], $gameId);
+                
                 return [
                     'success' => true,
                     'message' => 'Partie créée avec succès.',
@@ -482,7 +487,14 @@ class GameController {
             $stmt->bindParam(':board_state', $boardJson);
             $stmt->bindParam(':next_player', $nextPlayer);
             $stmt->bindParam(':status', $status);
-            $stmt->bindParam(':winner_id', $winner_id);
+            // Si l'IA est gagnante (winner_id = 0) on met NULL pour éviter la contrainte FK,
+            // on continuera à nous baser sur le champ `result` pour l'affichage et les stats.
+            $finalWinnerId = ($winner_id === 0) ? null : $winner_id; // Peut être null si match nul ou bot gagnant
+            if (is_null($finalWinnerId)) {
+                $stmt->bindValue(':winner_id', null, PDO::PARAM_NULL);
+            } else {
+                $stmt->bindValue(':winner_id', $finalWinnerId, PDO::PARAM_INT);
+            }
             $stmt->bindParam(':game_id', $game_id);
             
             if (!$stmt->execute()) {
@@ -1175,30 +1187,64 @@ class GameController {
             }
             
             // Mettre à jour le statut de la partie - valeur par défaut pour winner_id
-            $finalWinnerId = $winner_id; // Peut être null si match nul
+            $finalWinnerId = ($winner_id === 0) ? null : $winner_id; // Peut être null si match nul ou bot gagnant
             $status = 'finished';
             
-            // Déterminer le résultat de la partie
+            // -----------------------------------------------------------------
+            // Déterminer le résultat de la partie (champ "result")
+            // -----------------------------------------------------------------
+            // On se base sur $winner_id AVANT conversion FK (0 → NULL) pour que
+            // les parties contre l'IA et les abandons soient correctement
+            // comptabilisées. 3 cas :
+            //   • $isDrawGame  → "draw"
+            //   • $winner_id == player1_id → "player1_won"
+            //   • Sinon (player2_id ou bot) → "player2_won"
             $result = null;
             if ($isDrawGame) {
                 $result = 'draw';
-            } else if ($finalWinnerId === $gameInfo['player1_id']) {
+            } elseif ($winner_id == $gameInfo['player1_id']) {
                 $result = 'player1_won';
-            } else if ($finalWinnerId === $gameInfo['player2_id'] || $finalWinnerId === 0) {
+            } else {
+                // Gagnant = joueur 2 ou bot IA
                 $result = 'player2_won';
             }
             
-            $updateQuery = "UPDATE games SET 
-                     status = :status, 
-                     winner_id = :winner_id,
-                     result = :result,
-                     updated_at = NOW()
-                     WHERE id = :game_id";
-            
+            // Vérifier si la colonne `result` existe (certaines bases plus anciennes ne l'ont pas)
+            $hasResultColumn = false;
+            try {
+                $colStmt = $this->db->prepare("SHOW COLUMNS FROM games LIKE 'result'");
+                $colStmt->execute();
+                $hasResultColumn = $colStmt->rowCount() > 0;
+            } catch (PDOException $ex) {
+                // On ignore – on considérera que la colonne n'existe pas
+            }
+
+            if ($hasResultColumn) {
+                $updateQuery = "UPDATE games SET 
+                         status = :status, 
+                         winner_id = :winner_id,
+                         result = :result,
+                         updated_at = NOW()
+                         WHERE id = :game_id";
+            } else {
+                $updateQuery = "UPDATE games SET 
+                         status = :status, 
+                         winner_id = :winner_id,
+                         updated_at = NOW()
+                         WHERE id = :game_id";
+            }
+
             $updateStmt = $this->db->prepare($updateQuery);
+
             $updateStmt->bindParam(':status', $status);
-            $updateStmt->bindParam(':winner_id', $finalWinnerId);
-            $updateStmt->bindParam(':result', $result);
+            if (is_null($finalWinnerId)) {
+                $updateStmt->bindValue(':winner_id', null, PDO::PARAM_NULL);
+            } else {
+                $updateStmt->bindValue(':winner_id', $finalWinnerId, PDO::PARAM_INT);
+            }
+            if ($hasResultColumn) {
+                $updateStmt->bindParam(':result', $result);
+            }
             $updateStmt->bindParam(':game_id', $game_id);
             
             if (!$updateStmt->execute()) {
@@ -1264,6 +1310,9 @@ class GameController {
             $this->db->commit();
             error_log("endGame: Transaction confirmée avec succès");
             
+            // Synchroniser les statistiques JSON
+            $this->syncJsonStatsAfterGame($game_id);
+            
             return true;
         } catch (PDOException $e) {
             // En cas d'erreur, annuler la transaction
@@ -1273,6 +1322,32 @@ class GameController {
             
             error_log("Erreur dans endGame: " . $e->getMessage());
             return false;
+        }
+    }
+    
+    /**
+     * Synchronise les statistiques JSON après la fin d'une partie
+     * @param int $game_id ID de la partie
+     */
+    private function syncJsonStatsAfterGame($game_id) {
+        try {
+            // Appeler directement la classe JsonDatabase
+            require_once __DIR__ . '/../db/JsonDatabase.php';
+            $jsonDb = JsonDatabase::getInstance();
+            
+            // Exporter (ou mettre à jour) la partie complète dans la base JSON
+            $gameRes = $this->getGame($game_id, true);
+            if ($gameRes['success']) {
+                $jsonDb->saveGame($gameRes['game']);
+            }
+            
+            // Mettre à jour les statistiques et le classement ELO à partir de la partie JSON
+            $jsonDb->updateStatsAfterGame($game_id);
+            $jsonDb->updateEloRating($game_id);
+            
+            error_log("syncJsonStatsAfterGame : stats & ELO mis à jour pour la partie ID " . $game_id);
+        } catch (Exception $e) {
+            error_log("Erreur lors de la synchronisation des statistiques JSON: " . $e->getMessage());
         }
     }
     
@@ -1520,7 +1595,55 @@ class GameController {
             $stmt->bindParam(':to_col', $toCol);
             $stmt->bindParam(':captured', $captured_val);
             
-            return $stmt->execute();
+            $success = $stmt->execute();
+            
+            // -----------------------------------------------------------------
+            //  Mise à jour de la base JSON pour permettre le replay côté frontend
+            // -----------------------------------------------------------------
+            if ($success) {
+                require_once __DIR__ . '/../db/JsonDatabase.php';
+                $jsonDb = JsonDatabase::getInstance();
+
+                // Récupérer (ou créer) la partie dans le stockage JSON
+                $jsonGame = $jsonDb->getGameById($game_id);
+
+                if ($jsonGame === null) {
+                    // Export minimal de la partie depuis MySQL afin d'avoir une entrée JSON
+                    $gameRes = $this->getGame($game_id);
+                    if ($gameRes['success']) {
+                        $jsonGame = $gameRes['game'];
+                    } else {
+                        // Créer une structure basique – ne devrait presque jamais arriver
+                        $jsonGame = [
+                            'id'          => $game_id,
+                            'player1_id'  => $user_id, // approximation
+                            'player2_id'  => 0,
+                            'status'      => 'in_progress',
+                            'board_state' => json_encode([]),
+                            'moves'       => []
+                        ];
+                    }
+                }
+
+                // S'assurer que le tableau des mouvements existe
+                if (!isset($jsonGame['moves']) || !is_array($jsonGame['moves'])) {
+                    $jsonGame['moves'] = [];
+                }
+
+                // Ajouter le mouvement courant
+                $jsonGame['moves'][] = [
+                    'user_id'       => $user_id,
+                    'from_position' => $fromRow . ',' . $fromCol,
+                    'to_position'   => $toRow   . ',' . $toCol,
+                    'captured'      => $captured ? 1 : 0,
+                    'played_at'     => date('Y-m-d H:i:s')
+                ];
+
+                // Sauvegarder la partie mise à jour
+                $jsonDb->saveGame($jsonGame);
+            }
+
+            return $success;
             
         } catch (Exception $e) {
             error_log("Erreur lors de l'enregistrement du mouvement: " . $e->getMessage());

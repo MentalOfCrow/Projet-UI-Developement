@@ -1,0 +1,29 @@
+{
+    "id": 19,
+    "player1_id": 5,
+    "player2_id": 0,
+    "current_player": 2,
+    "board_state": "[[null, {\"type\": \"pawn\", \"player\": 1}, null, {\"type\": \"pawn\", \"player\": 1}, null, {\"type\": \"pawn\", \"player\": 1}, null, {\"type\": \"pawn\", \"player\": 1}], [{\"type\": \"pawn\", \"player\": 1}, null, {\"type\": \"pawn\", \"player\": 1}, null, {\"type\": \"pawn\", \"player\": 1}, null, {\"type\": \"pawn\", \"player\": 1}, null], [null, null, null, {\"type\": \"pawn\", \"player\": 1}, null, {\"type\": \"pawn\", \"player\": 1}, null, {\"type\": \"pawn\", \"player\": 1}], [null, null, {\"type\": \"pawn\", \"player\": 1}, null, null, null, null, null], [null, null, null, null, null, null, null, null], [{\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null], [null, {\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}], [{\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null]]",
+    "status": "in_progress",
+    "winner_id": null,
+    "created_at": "2025-05-12 09:38:35",
+    "updated_at": "2025-05-12 09:38:36",
+    "player1_name": "b",
+    "player2_name": "IA",
+    "moves": [
+        {
+            "user_id": "5",
+            "from_position": "2,1",
+            "to_position": "3,2",
+            "captured": 0,
+            "played_at": "2025-05-12 09:38:36"
+        },
+        {
+            "user_id": "0",
+            "from_position": "5,2",
+            "to_position": "4,3",
+            "captured": 0,
+            "played_at": "2025-05-12 09:38:36"
+        }
+    ]
+}

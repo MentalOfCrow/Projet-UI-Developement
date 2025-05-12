@@ -15,6 +15,7 @@ require_once __DIR__ . '/../../../backend/includes/config.php';
 require_once __DIR__ . '/../../../backend/models/Game.php';
 require_once __DIR__ . '/../../../backend/models/User.php';
 require_once __DIR__ . '/../../../backend/controllers/GameController.php';
+require_once __DIR__ . '/../../../backend/db/JsonDatabase.php';
 
 // Log function for debugging
 function logDebug($message) {
@@ -58,6 +59,33 @@ if (!isset($_GET['game_id']) || empty($_GET['game_id'])) {
 
 $game_id = intval($_GET['game_id']);
 logDebug("Récupération des informations pour la partie ID=" . $game_id);
+
+// Tentative de récupération via la base JSON (préférée pour un fonctionnement sans MySQL)
+$jsonDb = JsonDatabase::getInstance();
+$jsonGame = $jsonDb->getGameById($game_id);
+
+if ($jsonGame !== null) {
+    // Vérifier que l'utilisateur a participé à la partie
+    if ($jsonGame['player1_id'] !== $user_id && $jsonGame['player2_id'] !== $user_id) {
+        ob_end_clean();
+        echo json_encode([
+            'success' => false,
+            'message' => 'Vous n\'avez pas participé à cette partie.'
+        ]);
+        exit();
+    }
+
+    // Préparer la réponse au même format que précédemment
+    $responseData = [
+        'success' => true,
+        'game'    => $jsonGame,
+        'moves'   => $jsonGame['moves'] ?? []
+    ];
+
+    ob_end_clean();
+    echo json_encode($responseData);
+    exit();
+}
 
 // Create GameController instance
 $gameController = new GameController();

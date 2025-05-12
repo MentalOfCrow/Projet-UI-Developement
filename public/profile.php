@@ -20,6 +20,7 @@ require_once __DIR__ . '/../backend/controllers/ProfileController.php';
 require_once __DIR__ . '/../backend/controllers/FriendController.php';
 require_once __DIR__ . '/../backend/controllers/NotificationController.php';
 require_once __DIR__ . '/../backend/controllers/GameController.php';
+require_once __DIR__ . '/../backend/db/JsonDatabase.php';
 
 // Get user ID from URL or use logged-in user's ID
 $profileUserId = isset($_GET['id']) ? intval($_GET['id']) : (Session::isLoggedIn() ? Session::getUserId() : null);
@@ -61,41 +62,99 @@ try {
         }
     }
     
-    // Récupération des statistiques de jeu depuis la table stats
-    $db = Database::getInstance()->getConnection();
-    $statsQuery = "SELECT games_played as total_games, games_won as victories, games_lost as defeats FROM stats WHERE user_id = ?";
-    $statsStmt = $db->prepare($statsQuery);
-    $statsStmt->execute([$profileUserId]);
-    $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+    // Récupération des statistiques de jeu depuis les fichiers JSON (plus de dépendance MySQL)
+    $jsonDb = JsonDatabase::getInstance();
+    // Correction ultime : forcer la reconstruction de l'index ET la resynchronisation complète
+    $gamesDir = dirname(__DIR__) . '/data/games/';
+    $games = glob($gamesDir . 'game_*.json');
+    foreach ($games as $gameFile) {
+        $gameData = json_decode(file_get_contents($gameFile), true);
+        if (!$gameData) continue;
+        // Marquer comme terminée si un résultat est présent
+        if (isset($gameData['result']) && (!isset($gameData['status']) || $gameData['status'] !== 'finished')) {
+            $gameData['status'] = 'finished';
+            $jsonDb->saveGame($gameData);
+        }
+        // On ne prend que les parties terminées
+        if ((isset($gameData['status']) && $gameData['status'] === 'finished')) {
+            if ((isset($gameData['player1_id']) && $gameData['player1_id'] == $profileUserId) ||
+                (isset($gameData['player2_id']) && $gameData['player2_id'] == $profileUserId)) {
+                $jsonDb->updateGamesIndex($profileUserId, $gameData['id']);
+            }
+        }
+    }
+    // Synchronisation forcée
+    $jsonDb->synchronizeUserStats($profileUserId);
+    $stats = $jsonDb->getUserStats($profileUserId);
+
+    // Après récupération des stats JSON, recalculer via les parties réelles
+    $allGames = $jsonDb->getUserGames($profileUserId);
+    $totalGames = count($allGames);
+    $victories = 0;
+    $defeats   = 0;
+    $draws     = 0;
+    foreach ($allGames as $g) {
+        $winnerId = $g['winner_id'] ?? null;
+        if (array_key_exists('winner_id', $g)) {
+            // Partie terminée: déterminer le résultat
+            if ($winnerId === null) {
+                $draws++;
+            } elseif ($winnerId == $profileUserId) {
+                $victories++;
+            } else {
+                $defeats++;
+            }
+        } elseif (isset($g['result'])) {
+            // Fallback sur result si winner_id manquant
+            $res = $g['result'];
+            if ($res === 'draw') {
+                $draws++;
+            } else {
+                $isPlayer1 = ($g['player1_id'] == $profileUserId);
+                if (($isPlayer1 && $res === 'player1_won') || (!$isPlayer1 && $res === 'player2_won')) {
+                    $victories++;
+                } else {
+                    $defeats++;
+                }
+            }
+        }
+    }
+    $winRate  = $totalGames > 0 ? round(($victories / $totalGames) * 100, 1) : 0;
+
+    // ------------------------------------------------------------------
+    // Gestion des amis (facultatif – désactivé si MySQL n'est pas dispo)
+    // ------------------------------------------------------------------
+    $friendController = null;
     
-    $totalGames = $stats['total_games'] ?? 0;
-    $victories = $stats['victories'] ?? 0;
-    $defeats = $stats['defeats'] ?? 0;
-    $winRate = $totalGames > 0 ? round(($victories / $totalGames) * 100) : 0;
-    
-    // Get friends based on privacy settings
-    $friendController = new FriendController();
     $friends = [];
-    if ($isOwnProfile || 
-        (!isset($error) && isset($profileData['privacy_level']) && 
-         ($profileData['privacy_level'] === 'public' || 
-          ($profileData['privacy_level'] === 'friends' && $currentUserId && $friendController->areFriends($currentUserId, $profileUserId))))) {
-        $friendsResult = $friendController->getFriendsList($profileUserId);
-        $friends = $friendsResult['success'] ? ($friendsResult['friends'] ?? []) : [];
+    if ($friendController) {
+        if ($isOwnProfile || 
+            (!isset($error) && isset($profileData['privacy_level']) && 
+             ($profileData['privacy_level'] === 'public' || 
+              ($profileData['privacy_level'] === 'friends' && $currentUserId && $friendController->areFriends($currentUserId, $profileUserId))))) {
+            $friendsResult = $friendController->getFriendsList($profileUserId);
+            $friends = $friendsResult['success'] ? ($friendsResult['friends'] ?? []) : [];
+        }
     }
-    
-    // Only get pending requests if this is the user's own profile
+
+    // Pending requests uniquement si l'utilisateur possède FriendController
     $pendingRequests = [];
-    if ($isOwnProfile) {
+    if ($isOwnProfile && $friendController) {
         $pendingRequestsData = $friendController->getPendingFriendRequests();
-        $pendingRequests = $pendingRequestsData['success'] ? ($pendingRequestsData['received'] ?? []) : [];
+        $pendingRequests     = $pendingRequestsData['success'] ? ($pendingRequestsData['received'] ?? []) : [];
     }
     
-    // Récupérer le rang du joueur dans le leaderboard
-    $gameController = new GameController();
-    $playerRank = $gameController->getPlayerRank($profileUserId);
-    $rank = $playerRank['rank'] ?? 0;
-    
+    // Récupérer le rang du joueur dans le leaderboard (mode JSON uniquement)
+    $activePlayers = $jsonDb->countActivePlayers();
+    $leaderboard   = $jsonDb->getLeaderboard($activePlayers, 0);
+    $rank = 0;
+    foreach ($leaderboard as $entry) {
+        if (($entry['user_id'] ?? null) == $profileUserId) {
+            $rank = $entry['rank'];
+            break;
+        }
+    }
+
 } catch (Exception $e) {
     $error = "Une erreur s'est produite lors du chargement du profil.";
     error_log("Error loading profile: " . $e->getMessage());
@@ -129,30 +188,34 @@ include __DIR__ . '/../backend/includes/header.php';
                 
                 <?php if (!$isOwnProfile && $currentUserId): ?>
                     <?php 
-                    // Vérifier si ils sont amis
-                    $areFriends = $friendController->areFriends($currentUserId, $profileUserId);
-                    
-                    // Vérifier les demandes d'amis en attente
-                    $pendingRequests = $friendController->getPendingFriendRequests();
-                    $hasSentRequest = false;
+                    // Système d'amis uniquement si disponible
+                    $areFriends       = false;
+                    $hasSentRequest   = false;
                     $hasReceivedRequest = false;
-                    
-                    if ($pendingRequests['success'] && !empty($pendingRequests['requests'])) {
-                        foreach ($pendingRequests['requests'] as $request) {
-                            if ($request['sender_id'] == $profileUserId) {
-                                $hasReceivedRequest = true;
-                                break;
+
+                    if ($friendController) {
+                        // Vérifier si ils sont amis
+                        $areFriends = $friendController->areFriends($currentUserId, $profileUserId);
+
+                        // Vérifier les demandes d'amis en attente
+                        $pendingRequestsInfo = $friendController->getPendingFriendRequests();
+                        if ($pendingRequestsInfo['success'] && !empty($pendingRequestsInfo['requests'])) {
+                            foreach ($pendingRequestsInfo['requests'] as $request) {
+                                if ($request['sender_id'] == $profileUserId) {
+                                    $hasReceivedRequest = true;
+                                    break;
+                                }
                             }
                         }
-                    }
-                    
-                    // Vérifier si l'utilisateur courant a envoyé une demande
-                    $sentRequests = $friendController->getPendingFriendRequests();
-                    if ($sentRequests['success'] && !empty($sentRequests['requests'])) {
-                        foreach ($sentRequests['requests'] as $request) {
-                            if ($request['receiver_id'] == $profileUserId) {
-                                $hasSentRequest = true;
-                                break;
+
+                        // Vérifier si l'utilisateur courant a envoyé une demande
+                        $sentRequestsInfo = $friendController->getPendingFriendRequests();
+                        if ($sentRequestsInfo['success'] && !empty($sentRequestsInfo['requests'])) {
+                            foreach ($sentRequestsInfo['requests'] as $request) {
+                                if ($request['receiver_id'] == $profileUserId) {
+                                    $hasSentRequest = true;
+                                    break;
+                                }
                             }
                         }
                     }
@@ -174,7 +237,7 @@ include __DIR__ . '/../backend/includes/header.php';
             </div>
         </div>
         
-        <div class="profile-stats grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div class="profile-stats grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
             <div class="stat-card bg-gray-50 p-4 rounded shadow-sm text-center">
                 <div class="stat-value text-3xl font-bold text-gray-800"><?php echo $totalGames; ?></div>
                 <div class="stat-label text-gray-600">Parties jouées</div>
@@ -184,10 +247,23 @@ include __DIR__ . '/../backend/includes/header.php';
                 <div class="stat-label text-gray-600">Victoires</div>
             </div>
             <div class="stat-card bg-gray-50 p-4 rounded shadow-sm text-center">
+                <div class="stat-value text-3xl font-bold text-yellow-600"><?php echo $draws; ?></div>
+                <div class="stat-label text-gray-600">Matchs nuls</div>
+            </div>
+            <div class="stat-card bg-gray-50 p-4 rounded shadow-sm text-center">
                 <div class="stat-value text-3xl font-bold text-blue-600"><?php echo $winRate; ?>%</div>
                 <div class="stat-label text-gray-600">Taux de victoire</div>
             </div>
         </div>
+        
+        <?php if ($isOwnProfile && ($totalGames != ($stats['games_played'] ?? 0) || $totalGames == 0)): ?>
+        <div class="mt-4 text-center">
+            <a href="/sync_stats.php" class="text-blue-600 hover:text-blue-800 underline">
+                <i class="fas fa-sync-alt mr-1"></i> Synchroniser mes statistiques
+            </a>
+            <p class="text-xs text-gray-500 mt-1">Si vos statistiques ne semblent pas à jour, cliquez ici pour les synchroniser</p>
+        </div>
+        <?php endif; ?>
         
         <!-- Affichage du rang -->
         <?php if ($rank > 0): ?>
@@ -363,6 +439,10 @@ include __DIR__ . '/../backend/includes/header.php';
                 <div class="bg-white p-4 shadow rounded">
                     <h3 class="text-lg font-semibold text-red-600 mb-2">Défaites</h3>
                     <p class="text-3xl font-bold"><?php echo $defeats; ?></p>
+                </div>
+                <div class="bg-white p-4 shadow rounded">
+                    <h3 class="text-lg font-semibold text-yellow-600 mb-2">Matchs nuls</h3>
+                    <p class="text-3xl font-bold"><?php echo $draws; ?></p>
                 </div>
                 <div class="bg-white p-4 shadow rounded">
                     <h3 class="text-lg font-semibold text-blue-600 mb-2">% de victoires</h3>

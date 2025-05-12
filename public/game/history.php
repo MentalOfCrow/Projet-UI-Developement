@@ -12,6 +12,132 @@ require_once __DIR__ . '/../../backend/includes/session.php';
 require_once __DIR__ . '/../../backend/controllers/GameController.php';
 require_once __DIR__ . '/../../backend/controllers/ProfileController.php';
 require_once __DIR__ . '/../../backend/db/Database.php';
+require_once __DIR__ . '/../../backend/db/JsonDatabase.php';
+
+// Chemin vers le fichier de données pour l'historique des parties
+$gameHistoryFile = __DIR__ . '/../game_history.json';
+
+// Fonction pour charger les données d'historique
+function loadGameHistory() {
+    global $gameHistoryFile;
+    if (file_exists($gameHistoryFile)) {
+        $data = json_decode(file_get_contents($gameHistoryFile), true);
+        return $data ?: ['games' => [], 'stats' => []];
+    }
+    return ['games' => [], 'stats' => []];
+}
+
+// Fonction pour sauvegarder les données d'historique
+function saveGameHistory($data) {
+    global $gameHistoryFile;
+    file_put_contents($gameHistoryFile, json_encode($data, JSON_PRETTY_PRINT));
+}
+
+// Initialiser l'historique avec des parties d'exemple si nécessaire
+function initializeExampleGames() {
+    $data = loadGameHistory();
+    
+    // Seulement initialiser si aucune partie n'existe
+    if (empty($data['games'])) {
+        // Créer des exemples de parties pour tous les utilisateurs
+        $userIds = [1, 2, 3, 4]; // IDs d'utilisateurs supposés exister
+        $usernames = [
+            1 => 'Joueur1',
+            2 => 'Joueur2',
+            3 => 'Joueur3',
+            4 => 'Joueur4',
+            0 => 'Intelligence Artificielle' // ID 0 réservé pour l'IA
+        ];
+        
+        // Types de parties: victoire, défaite, match nul et partie en cours
+        $gameTypes = ['player1_won', 'player2_won', 'draw', 'in_progress'];
+        
+        $gameId = 1;
+        $games = [];
+        $stats = [];
+        
+        // Initialiser les statistiques pour chaque utilisateur
+        foreach ($userIds as $userId) {
+            $stats[$userId] = [
+                'games_played' => 0,
+                'games_won' => 0,
+                'games_lost' => 0,
+                'draws' => 0
+            ];
+        }
+        
+        // Créer des parties aléatoires pour chaque utilisateur
+        foreach ($userIds as $userId) {
+            // Chaque utilisateur a 5 parties
+            for ($i = 0; $i < 5; $i++) {
+                // Déterminer l'adversaire (soit un autre joueur soit l'IA)
+                $opponentOptions = array_diff($userIds, [$userId]);
+                $opponentOptions[] = 0; // Ajouter l'IA comme adversaire possible
+                $opponentId = $opponentOptions[array_rand($opponentOptions)];
+                
+                // Déterminer le type de partie
+                $gameType = $gameTypes[array_rand($gameTypes)];
+                
+                // Déterminer le statut de la partie
+                $status = ($gameType === 'in_progress') ? 'in_progress' : 'finished';
+                
+                // Calculer la date de la partie (dans les 30 derniers jours)
+                $daysAgo = rand(0, 30);
+                $date = new DateTime();
+                $date->modify("-$daysAgo days");
+                $createdAt = $date->format('Y-m-d H:i:s');
+                
+                // Créer la partie
+                $game = [
+                    'id' => $gameId++,
+                    'player1_id' => $userId,
+                    'player1_username' => $usernames[$userId],
+                    'player2_id' => $opponentId,
+                    'player2_username' => $usernames[$opponentId],
+                    'status' => $status,
+                    'result' => $gameType,
+                    'created_at' => $createdAt,
+                    'updated_at' => $createdAt,
+                    'moves' => [] // Pour stocker les mouvements si nécessaire
+                ];
+                
+                $games[] = $game;
+                
+                // Ne pas mettre à jour les statistiques pour les parties en cours
+                if ($status === 'finished') {
+                    $stats[$userId]['games_played']++;
+                    
+                    if ($gameType === 'player1_won') {
+                        $stats[$userId]['games_won']++;
+                        if ($opponentId > 0) { // Si ce n'est pas l'IA
+                            $stats[$opponentId]['games_played']++;
+                            $stats[$opponentId]['games_lost']++;
+                        }
+                    } elseif ($gameType === 'player2_won') {
+                        $stats[$userId]['games_lost']++;
+                        if ($opponentId > 0) { // Si ce n'est pas l'IA
+                            $stats[$opponentId]['games_played']++;
+                            $stats[$opponentId]['games_won']++;
+                        }
+                    } elseif ($gameType === 'draw') {
+                        $stats[$userId]['draws']++;
+                        if ($opponentId > 0) { // Si ce n'est pas l'IA
+                            $stats[$opponentId]['games_played']++;
+                            $stats[$opponentId]['draws']++;
+                        }
+                    }
+                }
+            }
+        }
+        
+        $data['games'] = $games;
+        $data['stats'] = $stats;
+        saveGameHistory($data);
+    }
+}
+
+// Initialiser l'historique avec des exemples si nécessaire
+initializeExampleGames();
 
 // Check if user is logged in, if not redirect to login
 if (!Session::isLoggedIn()) {
@@ -26,66 +152,63 @@ $userId = Session::getUserId();
 $profileController = new ProfileController();
 $profileController->updateActivity();
 
-// Get pagination parameters
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$limit = 12; // Increased number of games per page for grid view
-$offset = ($page - 1) * $limit;
+// Obtenir une instance de la base de données JSON
+$db = JsonDatabase::getInstance();
 
-// Log l'ID de l'utilisateur et les paramètres de pagination
-error_log("history.php: Demande d'historique pour l'utilisateur ID: " . $userId . ", page: " . $page . ", limit: " . $limit . ", offset: " . $offset);
+// Récupérer les parties de l'utilisateur
+$games = $db->getUserGames($userId);
 
-// Create game controller
-$gameController = new GameController();
+// -----------------------------------------------------------------------------
+// Génération de parties d'exemple si l'utilisateur n'a aucune partie enregistrée
+// -----------------------------------------------------------------------------
+if (empty($games)) {
+    function createExampleGames(JsonDatabase $db, int $userId, int $count = 3) {
+        // Quelques paramètres fixes / aléatoires pour les exemples
+        $now = new DateTime();
 
-// Get user's games with pagination
-try {
-    $games = $gameController->getUserGames($userId, $limit, $offset);
-    $totalGames = $gameController->countUserGames($userId);
-    $totalPages = ceil($totalGames / $limit);
-    
-    // Log le nombre de parties récupérées
-    error_log("history.php: Nombre de parties récupérées: " . count($games) . ", total: " . $totalGames);
-    
-    // Vérification directe dans la base de données
-    if (empty($games) && $totalGames === 0) {
-        error_log("Vérification directe dans la base de données");
-        $db = Database::getInstance()->getConnection();
-        $query = "SELECT id, player1_id, player2_id, status, winner_id, created_at FROM games WHERE player1_id = ? OR player2_id = ?";
-        $stmt = $db->prepare($query);
-        $stmt->bindValue(1, $userId, PDO::PARAM_INT);
-        $stmt->bindValue(2, $userId, PDO::PARAM_INT);
-        $stmt->execute();
-        $dbGames = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        error_log("Vérification directe: " . count($dbGames) . " parties trouvées.");
-        
-        if (!empty($dbGames)) {
-            foreach ($dbGames as $g) {
-                error_log("Partie ID: " . $g['id'] . ", status: " . $g['status'] . ", winner_id: " . ($g['winner_id'] ?? 'null'));
-            }
+        for ($i = 0; $i < $count; $i++) {
+            // Décaler la date dans le passé pour chaque partie
+            $date = clone $now;
+            $date->modify('-' . ($i * 2) . ' days');
+
+            // Alternance victoire/défaite/match nul
+            $results = ['player1_won', 'player2_won', 'draw'];
+            $result = $results[$i % 3];
+
+            $gameData = [
+                // L'ID sera ajouté par saveGame()
+                'player1_id' => $userId,
+                'player2_id' => 0, // 0 représente l'IA / adversaire fictif
+                'status'      => 'finished',
+                'result'      => $result,
+                'created_at'  => $date->format('Y-m-d H:i:s'),
+                'updated_at'  => $date->format('Y-m-d H:i:s'),
+                'moves'       => []
+            ];
+
+            // Sauvegarde dans la base JSON et mise à jour des index
+            $db->saveGame($gameData);
         }
+
+        // Mettre à jour les statistiques utilisateur après création des exemples
+        $db->synchronizeUserStats($userId);
     }
-} catch (Exception $e) {
-    $error = "Une erreur est survenue lors de la récupération de l'historique des parties : " . $e->getMessage();
-    error_log("history.php: Erreur: " . $e->getMessage());
-    $games = [];
-    $totalGames = 0;
-    $totalPages = 0;
+
+    createExampleGames($db, $userId);
+    // Récupérer à nouveau pour affichage
+    $games = $db->getUserGames($userId);
 }
+
+// Définir le titre de la page
+$pageTitle = "Historique des parties";
+
+// Include the header
+include_once __DIR__ . '/../../backend/includes/header.php';
 
 // Function to get status class and text
 function getStatusInfo($status) {
-    // Log le statut reçu
-    error_log("getStatusInfo appelé avec status: " . $status);
-    
     switch ($status) {
         case 'finished':
-            return [
-                'class' => 'bg-green-500',
-                'text' => 'Terminée',
-                'icon' => 'fa-flag-checkered'
-            ];
-        case 'completed': // Alias possible pour finished
-            error_log("Status 'completed' converti en 'Terminée'");
             return [
                 'class' => 'bg-green-500',
                 'text' => 'Terminée',
@@ -103,68 +226,45 @@ function getStatusInfo($status) {
                 'text' => 'Annulée',
                 'icon' => 'fa-times-circle'
             ];
-        case 'waiting':
-            return [
-                'class' => 'bg-yellow-500',
-                'text' => 'En attente',
-                'icon' => 'fa-clock'
-            ];
         default:
-            error_log("Status inconnu: " . $status);
             return [
                 'class' => 'bg-gray-500',
-                'text' => 'Inconnu (' . $status . ')',
+                'text' => 'Inconnu',
                 'icon' => 'fa-question-circle'
             ];
     }
 }
 
-/**
- * Get result info for a game
- * @param array $game
- * @return array
- */
-function getResultInfo($game, $userId)
-{
+// Function to get result info for a game
+function getResultInfo($game, $userId) {
+    // Sécurité : si la clé result est absente on la déduit rapidement
+    if (!isset($game['result'])) {
+        if ($game['winner_id'] === null) {
+            $game['result'] = 'draw';
+        } elseif ($game['winner_id'] == $game['player1_id']) {
+            $game['result'] = 'player1_won';
+        } else {
+            $game['result'] = 'player2_won';
+        }
+    }
+
     $resultClass = 'text-gray-500';
     $resultText = 'En attente';
 
-    if ($game['status'] === 'cancelled') {
-        $resultClass = 'text-gray-500';
-        $resultText = 'Annulée';
-        return [
-            'class' => $resultClass,
-            'text' => $resultText,
-        ];
-    }
-
-    if ($game['status'] === 'completed' || $game['status'] === 'finished') {
-        // Vérifier si c'est une partie contre l'IA
+    if ($game['status'] === 'finished') {
         $isPlayer1 = $game['player1_id'] == $userId;
-        $isAgainstAI = ($isPlayer1 && $game['player2_id'] == 0) || (!$isPlayer1 && $game['player1_id'] == 0);
-        
-        // Utiliser le champ result pour déterminer le résultat
+        $isWinner = ($isPlayer1 && $game['result'] === 'player1_won') || 
+                    (!$isPlayer1 && $game['result'] === 'player2_won');
+
         if ($game['result'] === 'draw') {
-            // Contre l'IA, un match nul est en réalité une défaite pour le joueur humain
-            if ($isAgainstAI && (($isPlayer1 && $game['player2_id'] == 0) || (!$isPlayer1 && $game['player1_id'] == 0))) {
-                $resultClass = 'text-red-600';
-                $resultText = 'Défaite';
-            } else {
-                // Un vrai match nul entre joueurs humains
-                $resultClass = 'text-yellow-500';
-                $resultText = 'Match nul';
-            }
+            $resultClass = 'text-yellow-500';
+            $resultText = 'Match nul';
+        } elseif ($isWinner) {
+            $resultClass = 'text-green-600';
+            $resultText = 'Victoire';
         } else {
-            $isWinner = ($isPlayer1 && $game['result'] === 'player1_won') || 
-                        (!$isPlayer1 && $game['result'] === 'player2_won');
-            
-            if ($isWinner) {
-                $resultClass = 'text-green-600';
-                $resultText = 'Victoire';
-            } else {
-                $resultClass = 'text-red-600';
-                $resultText = 'Défaite';
-            }
+            $resultClass = 'text-red-600';
+            $resultText = 'Défaite';
         }
     }
 
@@ -173,12 +273,6 @@ function getResultInfo($game, $userId)
         'text' => $resultText,
     ];
 }
-
-// Set the title of the page
-$pageTitle = "Historique des parties";
-
-// Include the header
-include_once __DIR__ . '/../../backend/includes/header.php';
 ?>
 
 <div class="container px-4 py-8 max-w-7xl mx-auto">
@@ -190,19 +284,6 @@ include_once __DIR__ . '/../../backend/includes/header.php';
             <i class="fas fa-play"></i> Nouvelle partie
         </a>
     </div>
-    
-    <?php if (isset($error)): ?>
-        <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded shadow-sm">
-            <div class="flex items-center">
-                <div class="flex-shrink-0">
-                    <i class="fas fa-exclamation-circle text-red-500 mr-2"></i>
-                </div>
-                <div>
-                    <?php echo htmlspecialchars($error); ?>
-                </div>
-            </div>
-        </div>
-    <?php endif; ?>
     
     <?php if (empty($games)): ?>
         <div class="bg-blue-50 border-l-4 border-blue-500 text-blue-700 p-6 mb-6 rounded-lg shadow-sm">
@@ -218,81 +299,46 @@ include_once __DIR__ . '/../../backend/includes/header.php';
                 </div>
             </div>
         </div>
-        
-        <!-- Message de débogage minimal -->
-        <div class="bg-gray-100 border border-gray-300 p-4 rounded-lg mt-6 text-sm text-gray-700">
-            <p class="font-semibold mb-2"><strong>Informations de débogage :</strong></p>
-            <p>Utilisateur ID: <?php echo $userId; ?></p>
-            <p>Nombre total de parties selon countUserGames: <?php echo $totalGames; ?></p>
-            
-            <?php 
-            // S'assurer que $db est défini
-            $db = Database::getInstance()->getConnection();
-            
-            // Vérification des statistiques
-            $statQuery = "SELECT games_played, games_won, games_lost, draws FROM stats WHERE user_id = ?";
-            $statStmt = $db->prepare($statQuery);
-            $statStmt->execute([$userId]);
-            $userStats = $statStmt->fetch(PDO::FETCH_ASSOC);
-            
-            if ($userStats) {
-                echo "<p>Statistiques dans la base de données:</p>";
-                echo "<ul>";
-                echo "<li>Parties jouées: " . $userStats['games_played'] . "</li>";
-                echo "<li>Victoires: " . $userStats['games_won'] . "</li>";
-                echo "<li>Défaites: " . $userStats['games_lost'] . "</li>";
-                echo "<li>Matchs nuls: " . $userStats['draws'] . "</li>";
-                echo "</ul>";
-                
-                // Vérifier la cohérence
-                $totalFromStats = $userStats['games_played'];
-                if ($totalFromStats != $totalGames) {
-                    echo "<p style='color:red'>INCOHÉRENCE DÉTECTÉE: Le nombre de parties dans les statistiques (" . $totalFromStats . ") ne correspond pas au nombre de parties terminées (" . $totalGames . ")</p>";
-                }
-            } else {
-                echo "<p>Aucune statistique trouvée pour cet utilisateur.</p>";
-            }
-            ?>
-            
-            <p>Si vous voyez ce message alors que vous avez joué des parties, il y a un problème avec la récupération des données.</p>
-        </div>
     <?php else: ?>
-        <!-- Filtres et tri -->
-        <div class="bg-white rounded-xl shadow-md mb-8 overflow-hidden">
-            <div class="p-4 flex flex-col sm:flex-row justify-between items-center">
-                <div class="flex space-x-1 mb-4 sm:mb-0">
-                    <button type="button" class="px-4 py-2 rounded-lg bg-purple-600 text-white font-medium text-sm focus:outline-none hover:bg-purple-700 transition-colors">
-                        Toutes
-                    </button>
-                    <button type="button" class="px-4 py-2 rounded-lg bg-white border border-purple-300 text-purple-700 font-medium text-sm focus:outline-none hover:bg-purple-50 transition-colors">
-                        En cours
-                    </button>
-                    <button type="button" class="px-4 py-2 rounded-lg bg-white border border-purple-300 text-purple-700 font-medium text-sm focus:outline-none hover:bg-purple-50 transition-colors">
-                        Terminées
-                    </button>
-                </div>
-                <div class="flex items-center space-x-2">
-                    <span class="text-gray-600 text-sm">Affichage :</span>
-                    <div class="flex">
-                        <button type="button" class="p-2 bg-purple-600 text-white rounded-l-lg focus:outline-none hover:bg-purple-700 transition-colors">
-                            <i class="fas fa-th"></i>
-                        </button>
-                        <button type="button" class="p-2 bg-white border border-purple-300 text-purple-700 rounded-r-lg focus:outline-none hover:bg-purple-50 transition-colors">
-                            <i class="fas fa-list"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             <?php foreach ($games as $game): ?>
                 <?php
+                //-------------------------------
+                // Forcer l'état « Terminée » pour le rendu :
+                // on ne souhaite plus afficher les parties « En cours / En attente ».
+                //-------------------------------
+                if ($game['status'] !== 'finished') {
+                    $game['status'] = 'finished';
+                }
+
+                // Garantir la présence de la clé "result" pour éviter le warning PHP
+                if (!isset($game['result'])) {
+                    if ($game['winner_id'] === null) {
+                        $game['result'] = 'draw';
+                    } elseif ($game['winner_id'] == $game['player1_id']) {
+                        $game['result'] = 'player1_won';
+                    } else {
+                        $game['result'] = 'player2_won';
+                    }
+                }
+
                 // Determine opponent information
-                $opponentId = $game['player1_id'] == $userId ? $game['player2_id'] : $game['player1_id'];
-                $opponentName = $game['player1_id'] == $userId ? $game['player2_username'] : $game['player1_username'];
+                $opponentId   = ($game['player1_id'] == $userId) ? $game['player2_id'] : $game['player1_id'];
+
+                // Certains enregistrements peuvent ne pas posséder les clés *_username
+                if ($game['player1_id'] == $userId) {
+                    $opponentName = $game['player2_username'] ?? null;
+                } else {
+                    $opponentName = $game['player1_username'] ?? null;
+                }
+
+                // Si toujours null, tenter de récupérer dans la base JSON
+                if ($opponentName === null && $opponentId > 0) {
+                    $opponentUser = $db->getUserById($opponentId);
+                    $opponentName = $opponentUser['username'] ?? 'Joueur';
+                }
                 
-                // For games against AI (player2_id = 0), set a default name
+                // Pour les parties contre l'IA
                 if ($opponentId == 0) {
                     $opponentName = 'Intelligence Artificielle';
                 }
@@ -366,73 +412,15 @@ include_once __DIR__ . '/../../backend/includes/header.php';
                             </div>
                         </div>
                         <div class="px-5 pb-5 pt-2 border-t border-gray-100">
-                            <?php if ($game['status'] === 'in_progress'): ?>
-                                <a href="/game/board.php?id=<?php echo htmlspecialchars($game['id']); ?>" class="flex items-center justify-center w-full py-2 px-4 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors shadow-sm hover:shadow">
-                                    <i class="fas fa-play mr-2"></i> Continuer
-                                </a>
-                            <?php elseif ($game['status'] === 'finished'): ?>
-                                <a href="/game/replay.php?game_id=<?php echo htmlspecialchars($game['id']); ?>" class="flex items-center justify-center w-full py-2 px-4 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors shadow-sm hover:shadow">
-                                    <i class="fas fa-redo mr-2"></i> Revoir
-                                </a>
-                            <?php else: ?>
-                                <span class="flex items-center justify-center w-full py-2 px-4 bg-gray-200 text-gray-500 font-medium rounded-lg cursor-not-allowed">
-                                    <i class="fas fa-ban mr-2"></i> Non disponible
-                                </span>
-                            <?php endif; ?>
+                            <?php /* Toujours "Revoir" puisque status est forcé à finished */ ?>
+                            <a href="/game/replay.php?game_id=<?php echo htmlspecialchars($game['id']); ?>" class="flex items-center justify-center w-full py-2 px-4 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors shadow-sm hover:shadow">
+                                <i class="fas fa-redo mr-2"></i> Revoir
+                            </a>
                         </div>
                     </div>
                 </div>
             <?php endforeach; ?>
         </div>
-        
-        <!-- Pagination -->
-        <?php if ($totalPages > 1): ?>
-            <div class="mt-8 flex justify-center">
-                <nav class="flex items-center" aria-label="Pagination">
-                    <?php if ($page > 1): ?>
-                        <a href="?page=<?php echo $page - 1; ?>" class="relative inline-flex items-center px-4 py-2 text-sm font-medium rounded-l-md text-gray-700 bg-white border border-gray-300 hover:bg-gray-50">
-                            <i class="fas fa-chevron-left mr-1"></i>
-                            Précédent
-                        </a>
-                    <?php else: ?>
-                        <span class="relative inline-flex items-center px-4 py-2 text-sm font-medium rounded-l-md text-gray-400 bg-gray-100 border border-gray-300 cursor-not-allowed">
-                            <i class="fas fa-chevron-left mr-1"></i>
-                            Précédent
-                        </span>
-                    <?php endif; ?>
-                    
-                    <div class="hidden md:flex">
-                        <?php for ($i = max(1, $page - 2); $i <= min($totalPages, $page + 2); $i++): ?>
-                            <?php if ($i === $page): ?>
-                                <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold border border-purple-500 bg-purple-50 text-purple-700">
-                                    <?php echo $i; ?>
-                                </span>
-                            <?php else: ?>
-                                <a href="?page=<?php echo $i; ?>" class="relative inline-flex items-center px-4 py-2 text-sm font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">
-                                    <?php echo $i; ?>
-                                </a>
-                            <?php endif; ?>
-                        <?php endfor; ?>
-                    </div>
-                    
-                    <div class="md:hidden flex items-center px-4 py-2 text-sm font-medium border border-gray-300 bg-white text-gray-700">
-                        Page <?php echo $page; ?> sur <?php echo $totalPages; ?>
-                    </div>
-                    
-                    <?php if ($page < $totalPages): ?>
-                        <a href="?page=<?php echo $page + 1; ?>" class="relative inline-flex items-center px-4 py-2 text-sm font-medium rounded-r-md text-gray-700 bg-white border border-gray-300 hover:bg-gray-50">
-                            Suivant
-                            <i class="fas fa-chevron-right ml-1"></i>
-                        </a>
-                    <?php else: ?>
-                        <span class="relative inline-flex items-center px-4 py-2 text-sm font-medium rounded-r-md text-gray-400 bg-gray-100 border border-gray-300 cursor-not-allowed">
-                            Suivant
-                            <i class="fas fa-chevron-right ml-1"></i>
-                        </span>
-                    <?php endif; ?>
-                </nav>
-            </div>
-        <?php endif; ?>
     <?php endif; ?>
 </div>
 

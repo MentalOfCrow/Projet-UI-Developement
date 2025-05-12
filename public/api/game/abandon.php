@@ -150,14 +150,49 @@ try {
         
         try {
         $db = Database::getInstance()->getConnection();
-        $updateQuery = "UPDATE games SET status = 'finished', winner_id = :winner_id, updated_at = NOW() WHERE id = :game_id";
+        // Déterminer le champ result à écrire
+        $resultText = 'player2_won';
+        if ($game['player2_id'] == 0) {
+            $resultText = 'player2_won'; // l'IA est considérée comme joueur 2
+        } else if ($winner_id == $game['player1_id']) {
+            $resultText = 'player1_won';
+        }
+
+        // Pour éviter la contrainte FK si winner_id == 0, on met NULL et on s'appuie sur `result`
+        $safeWinnerId = ($winner_id === 0) ? null : $winner_id;
+
+        $updateQuery = "UPDATE games SET status = 'finished', winner_id = :winner_id, result = :result, updated_at = NOW() WHERE id = :game_id";
         $stmt = $db->prepare($updateQuery);
         $stmt->bindParam(':game_id', $game_id, PDO::PARAM_INT);
-        $stmt->bindParam(':winner_id', $winner_id, PDO::PARAM_INT);
+        if (is_null($safeWinnerId)) {
+            $stmt->bindValue(':winner_id', null, PDO::PARAM_NULL);
+        } else {
+            $stmt->bindValue(':winner_id', $safeWinnerId, PDO::PARAM_INT);
+        }
+        $stmt->bindParam(':result', $resultText);
         $success = $stmt->execute();
         
             error_log("abandon.php - Mise à jour directe: " . ($success ? 'succès' : 'échec'));
             
+            // -----------------------------------------------------------------
+            //  Synchroniser immédiatement la partie et les statistiques JSON
+            // -----------------------------------------------------------------
+            if ($success) {
+                require_once __DIR__ . '/../../../backend/db/JsonDatabase.php';
+                $jsonDb = JsonDatabase::getInstance();
+
+                // Sauvegarder/mettre à jour la partie dans le stockage JSON
+                $gameController = new GameController();
+                $gameRes = $gameController->getGame($game_id, true);
+                if ($gameRes['success']) {
+                    $jsonDb->saveGame($gameRes['game']);
+                }
+
+                // Mettre à jour les stats et l'ELO
+                $jsonDb->updateStatsAfterGame($game_id);
+                $jsonDb->updateEloRating($game_id);
+            }
+
             if (!$success) {
                 // Nettoyer le tampon avant de répondre
                 ob_end_clean();

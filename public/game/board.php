@@ -190,16 +190,19 @@ $pageTitle = "Partie #" . $game_id . " - " . APP_NAME;
                         </p>
                     </div>
                 <?php else: ?>
+                    <?php 
+                        $result   = $gameData['game']['result'] ?? null;
+                        $statusMsg = '';
+                        if ($result === 'draw') {
+                            $statusMsg = "La partie s'est terminée par un match nul.";
+                        } elseif (($result === 'player1_won' && $isPlayer1) || ($result === 'player2_won' && !$isPlayer1)) {
+                            $statusMsg = 'Félicitations ! Vous avez gagné cette partie.';
+                        } else {
+                            $statusMsg = 'Vous avez perdu cette partie. Meilleure chance la prochaine fois !';
+                        }
+                    ?>
                     <div class="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-6 rounded-r-lg">
-                        <p class="font-medium">
-                            <?php if ($gameData['game']['winner_id'] == $currentUserId): ?>
-                                Félicitations ! Vous avez gagné cette partie.
-                            <?php elseif ($gameData['game']['winner_id'] == null): ?>
-                                La partie s'est terminée par un match nul.
-                            <?php else: ?>
-                                Vous avez perdu cette partie. Meilleure chance la prochaine fois !
-                            <?php endif; ?>
-                        </p>
+                        <p class="font-medium"><?php echo $statusMsg; ?></p>
                     </div>
                 <?php endif; ?>
                 
@@ -421,22 +424,32 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`Calcul des mouvements possibles pour la pièce à [${row},${col}]`);
         possibleMoves = [];
         
-        // Directions possibles dépendant du joueur
-        let directions = [];
-        if (userPlayer === 1) {
-            // Joueur 1 (noir) se déplace vers le bas
-            directions = isKing ? [{r: 1, c: -1}, {r: 1, c: 1}, {r: -1, c: -1}, {r: -1, c: 1}] : [{r: 1, c: -1}, {r: 1, c: 1}];
+        let moveDirs = [];
+        // Directions de capture (toutes les diagonales pour permettre la prise arrière)
+        const captureDirs = [
+            {r: 1,  c: -1},
+            {r: 1,  c: 1},
+            {r: -1, c: -1},
+            {r: -1, c: 1}
+        ];
+
+        // Pour les dames, elles se déplacent sur toutes les diagonales
+        if (isKing) {
+            moveDirs = captureDirs;
         } else {
-            // Joueur 2 (blanc) se déplace vers le haut
-            directions = isKing ? [{r: -1, c: -1}, {r: -1, c: 1}, {r: 1, c: -1}, {r: 1, c: 1}] : [{r: -1, c: -1}, {r: -1, c: 1}];
+            // Pour les pions, seulement vers l'avant
+            if (userPlayer === 1) {
+                moveDirs = [{r: 1, c: -1}, {r: 1, c: 1}];
+            } else {
+                moveDirs = [{r: -1, c: -1}, {r: -1, c: 1}];
+            }
         }
-        
-        console.log("Directions possibles:", directions);
-        
-        // Pour les pions normaux, on vérifie seulement les mouvements simples et captures
+
+        console.log("MoveDirs", moveDirs, "CaptureDirs", captureDirs);
+
         if (!isKing) {
             // Vérifier chaque direction
-            directions.forEach(dir => {
+            moveDirs.forEach(dir => {
                 const newRow = row + dir.r;
                 const newCol = col + dir.c;
                 
@@ -480,11 +493,38 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             });
+
+            // Vérifier captures dans toutes les directions (avant + arrière)
+            captureDirs.forEach(dir => {
+                const newRow = row + dir.r;
+                const newCol = col + dir.c;
+                if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                    const targetCell = document.querySelector(`.piece[data-row="${newRow}"][data-col="${newCol}"]`);
+                    if (targetCell && parseInt(targetCell.dataset.player) !== userPlayer) {
+                        const jumpRow = newRow + dir.r;
+                        const jumpCol = newCol + dir.c;
+                        if (jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
+                            const jumpCell = document.querySelector(`.piece[data-row="${jumpRow}"][data-col="${jumpCol}"]`);
+                            if (!jumpCell) {
+                                possibleMoves.push({
+                                    fromRow: row,
+                                    fromCol: col,
+                                    toRow: jumpRow,
+                                    toCol: jumpCol,
+                                    isCapture: true,
+                                    captureRow: newRow,
+                                    captureCol: newCol
+                                });
+                            }
+                        }
+                    }
+                }
+            });
         } 
         // Pour les dames, mouvements à longue distance
         else {
             // Pour chaque direction, parcourir toute la diagonale
-            directions.forEach(dir => {
+            moveDirs.forEach(dir => {
                 let currentRow = row;
                 let currentCol = col;
                 

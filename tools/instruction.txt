@@ -254,6 +254,4 @@ Cette approche progressive permettra d'implémenter le système social tout en c
    - Recommandations d'exercices ciblés pour améliorer ses points faibles
    - Statistiques sur les types d'ouvertures et de fins de parties préférées
 
-ini_set('log_errors', 1);
-ini_set('error_log', __DIR__ . '/../../../backend/logs/php_errors.log');
 

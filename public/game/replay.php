@@ -1,236 +1,192 @@
 <?php
-// Start output buffering to prevent any previous output
-ob_start();
+// -----------------------------------------------------------------------------
+//  REPLAY.PHP – VERSION MANUELLE
+// -----------------------------------------------------------------------------
+//  • Affiche l'état initial du plateau avant tout mouvement
+//  • Permet de visualiser manuellement chaque coup (cliquer sur un coup pour le voir)
+//  • Style visuel identique à board.php
+//  • Plateau dézoomer pour voir l'ensemble du jeu
+//  • Affichage correct des résultats (Victoire/Défaite/Match nul)
+// -----------------------------------------------------------------------------
 
-// Set display_errors for development
+use function htmlspecialchars as h;
+
+ob_start();
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-// Include configuration files
 require_once __DIR__ . '/../../backend/includes/config.php';
 require_once __DIR__ . '/../../backend/includes/session.php';
+require_once __DIR__ . '/../../backend/db/JsonDatabase.php';
+require_once __DIR__ . '/../../backend/controllers/GameController.php';
 require_once __DIR__ . '/../../backend/controllers/ProfileController.php';
 
-// Check if user is logged in, if not redirect to login
+// Auth
 if (!Session::isLoggedIn()) {
     header('Location: /auth/login.php');
     exit;
 }
-
-// Get current user's ID
 $userId = Session::getUserId();
+(new ProfileController())->updateActivity();
 
-// Update user activity
-$profileController = new ProfileController();
-$profileController->updateActivity();
-
-// Get game ID from URL
-$gameId = isset($_GET['game_id']) ? intval($_GET['game_id']) : 0;
-
-if (!$gameId) {
+// Game ID
+$gameId = isset($_GET['game_id']) ? (int)$_GET['game_id'] : 0;
+if ($gameId <= 0) {
     header('Location: /game/history.php');
     exit;
 }
 
-// Use the API endpoint instead of direct controller call
-$apiUrl = "/api/game/get_game_moves.php?game_id=" . $gameId;
-$apiResponse = file_get_contents($_SERVER['DOCUMENT_ROOT'] . $apiUrl);
+$jsonDb = JsonDatabase::getInstance();
+$game   = $jsonDb->getGameById($gameId);
+$moves  = [];
 
-if (!$apiResponse) {
+if ($game === null) {
+    // Fallback MySQL puis ré-export JSON pour le prochain appel
+    $gc = new GameController();
+    $res = $gc->getGame($gameId, true);
+    if (!$res['success']) {
+    header('Location: /game/history.php');
+    exit;
+}
+    $game  = $res['game'];
+    $moves = $game['moves'] ?? [];
+    $jsonDb->saveGame($game); // persiste
+} else {
+    $moves = $game['moves'] ?? [];
+}
+
+// Sécurité : l'utilisateur doit être joueur 1 ou 2
+if ($game['player1_id'] != $userId && $game['player2_id'] != $userId) {
     header('Location: /game/history.php');
     exit;
 }
 
-$gameData = json_decode($apiResponse, true);
-
-// Check if the API call was successful
-if (!$gameData['success']) {
-    header('Location: /game/history.php');
-    exit;
+// Normalisation
+if ($game['status'] !== 'finished') {
+    $game['status'] = 'finished';
 }
-
-// Extract game information
-$game = $gameData['game'];
-$boardState = json_decode($game['board_state'] ?? '[]', true);
-if (empty($boardState)) {
-    // Fallback to a default board state if none is provided by the API
-    $boardState = [];
-    for ($i = 0; $i < 8; $i++) {
-        $boardState[$i] = array_fill(0, 8, null);
+if (!isset($game['result'])) {
+    if ($game['winner_id'] === null) {
+        $game['result'] = 'draw';
+    } elseif ($game['winner_id'] == $game['player1_id']) {
+        $game['result'] = 'player1_won';
+    } else {
+        $game['result'] = 'player2_won';
     }
 }
-$moves = $gameData['moves'] ?? [];
 
-// Determine player names
-$player1Name = $game['player1_name'] ?: 'Joueur 1';
-$player2Name = $game['player2_name'] ?: ($game['player2_id'] == 0 ? 'IA' : 'Joueur 2');
+$player1Name = $game['player1_name'] ?? 'Joueur 1';
+$player2Name = $game['player2_name'] ?? (($game['player2_id'] == 0) ? 'IA' : 'Joueur 2');
+$isPlayer1   = ($game['player1_id'] == $userId);
 
-// Determine if current user is player 1 or 2
-$isPlayer1 = $game['player1_id'] == $userId;
-
-// Format game date
-$gameDate = new DateTime($game['created_at']);
-$formattedDate = $gameDate->format('d/m/Y H:i');
-
-// Determine game result information
-$statusText = "";
-$resultText = "";
-$resultClass = "";
-
-switch ($game['status']) {
-    case 'completed':
-    case 'finished':
-        $statusText = "Terminée";
-        
-        // Utiliser le champ result pour déterminer le résultat
-        if ($game['result'] === 'draw') {
-            $resultText = "Match nul";
-            $resultClass = "text-yellow-500";
-        } else if (($isPlayer1 && $game['result'] === 'player1_won') || (!$isPlayer1 && $game['result'] === 'player2_won')) {
-            $resultText = "Victoire";
-            $resultClass = "text-green-600";
+// Décodage board_state
+$initialBoard = [];
+if (!empty($game['board_state'])) {
+    $initialBoard = json_decode($game['board_state'], true) ?: [];
+}
+// Plateau par défaut si vide OU si des coups existent (pour garantir l'état initial)
+if (empty($initialBoard) || count($moves) > 0) {
+    $initialBoard = [];
+    for ($r = 0; $r < 8; $r++) {
+        for ($c = 0; $c < 8; $c++) {
+            if (($r + $c) % 2 == 1) {
+                if ($r < 3)      $initialBoard[$r][$c] = ['type' => 'pawn', 'player' => 1];
+                elseif ($r > 4)  $initialBoard[$r][$c] = ['type' => 'pawn', 'player' => 2];
+                else             $initialBoard[$r][$c] = null;
         } else {
-            $resultText = "Défaite";
-            $resultClass = "text-red-600";
+                $initialBoard[$r][$c] = null;
+}
         }
-        break;
-        
-    case 'in_progress':
-        $statusText = "En cours";
-        $resultText = "Partie non terminée";
-        $resultClass = "text-blue-600";
-        break;
-        
-    case 'cancelled':
-        $statusText = "Annulée";
-        $resultText = "Partie annulée";
-        $resultClass = "text-red-600";
-        break;
-        
-    default:
-        $statusText = "Inconnu";
-        $resultText = "Statut inconnu";
-        $resultClass = "text-gray-600";
+    }
 }
 
-// Set the title of the page
-$pageTitle = "Replay de partie #" . $gameId;
-
-// Include the header
-include_once __DIR__ . '/../../backend/includes/header.php';
+$pageTitle = "Replay de la partie #{$gameId}";
+include __DIR__ . '/../../backend/includes/header.php';
 ?>
 
-<div class="container px-4 py-8 max-w-7xl mx-auto">
-    <div class="flex flex-col sm:flex-row justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold text-purple-900 mb-4 sm:mb-0">
-            <i class="fas fa-redo mr-2"></i>Replay de la partie #<?php echo htmlspecialchars($gameId); ?>
-        </h1>
-        <a href="/game/history.php" class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition flex items-center">
-            <i class="fas fa-arrow-left mr-2"></i> Retour à l'historique
-        </a>
-    </div>
+<div class="max-w-7xl mx-auto px-4 py-6">
+    <h1 class="text-3xl font-bold text-purple-900 mb-4">Replay de la partie #<?= h($gameId) ?></h1>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Plateau et contrôles -->
-        <div class="lg:col-span-2">
-            <div class="bg-white rounded-xl shadow-md overflow-hidden">
-                <div class="bg-purple-100 px-4 py-3 border-b border-purple-200 flex justify-between items-center">
-                    <h2 class="text-xl font-semibold text-purple-900">Replay</h2>
-                    <span class="px-3 py-1 rounded-full text-sm font-semibold <?php echo $resultClass; ?>">
-                        <?php echo htmlspecialchars($resultText); ?>
-                    </span>
+        <!-- Colonne plateau -->
+        <div class="lg:col-span-2 flex flex-col items-center">
+            <!-- Panneau d'information du haut -->
+            <div class="w-full bg-white rounded-t-xl shadow p-4 mb-1 flex items-center justify-between">
+                <div class="flex items-center">
+                    <div class="w-6 h-6 rounded-full bg-black mr-2"></div>
+                    <span class="font-medium"><?= h($player1Name) ?></span>
                 </div>
-                <div class="p-4">
-                    <div class="mb-6 flex justify-center">
-                        <div class="relative inline-block">
-                            <canvas id="checkerboard" width="640" height="640" class="rounded-lg shadow-md max-w-full h-auto"></canvas>
+                <div class="font-bold">VS</div>
+                <div class="flex items-center">
+                    <span class="font-medium"><?= h($player2Name) ?></span>
+                    <div class="w-6 h-6 rounded-full bg-white border-2 border-black ml-2"></div>
+                </div>
                         </div>
+            
+            <!-- Plateau -->
+            <div class="w-full bg-white rounded-b-xl shadow p-4 flex flex-col items-center">
+                <div id="board-container" class="w-full aspect-square max-w-md mx-auto relative mb-4">
+                    <canvas id="boardCanvas" width="400" height="400" class="w-full h-full rounded shadow"></canvas>
+                    
+                    <!-- Affichage du tour actuel -->
+                    <div id="move-indicator" class="absolute bottom-2 right-2 bg-white/80 px-3 py-1 rounded-full text-sm font-bold shadow">
+                        Coup 0 / <?= count($moves) ?>
                     </div>
-                    <div class="mb-4">
-                        <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
-                            <button id="btn-first-move" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-3 rounded flex items-center text-sm">
-                                <i class="fas fa-step-backward mr-1"></i> Premier
-                            </button>
-                            <button id="btn-prev-move" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-3 rounded flex items-center text-sm">
-                                <i class="fas fa-chevron-left mr-1"></i> Précédent
-                            </button>
-                            <button id="btn-play-pause" class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded flex items-center text-sm">
-                                <i class="fas fa-play mr-1"></i> Lecture
-                            </button>
-                            <button id="btn-next-move" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-3 rounded flex items-center text-sm">
-                                <i class="fas fa-chevron-right mr-1"></i> Suivant
-                            </button>
-                            <button id="btn-last-move" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-3 rounded flex items-center text-sm">
-                                <i class="fas fa-step-forward mr-1"></i> Dernier
-                            </button>
                         </div>
-                        <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div id="progress-bar" class="h-full bg-purple-600 rounded-full" style="width: 0%"></div>
+
+                <!-- Contrôles -->
+                <div class="w-full flex flex-col space-y-2">
+                    <!-- Contrôles principaux -->
+                    <div class="flex justify-center items-center space-x-3">
+                        <button id="btnFirst" class="control-btn bg-purple-600 text-white">⏮ Début</button>
+                        <button id="btnPrev" class="control-btn bg-purple-600 text-white">◀ Précédent</button>
+                        <button id="btnPlay" class="control-btn bg-green-600 text-white px-4">▶ Lecture</button>
+                        <button id="btnNext" class="control-btn bg-purple-600 text-white">Suivant ▶</button>
+                        <button id="btnLast" class="control-btn bg-purple-600 text-white">Fin ⏭</button>
                         </div>
+                    
+                    <!-- Slider -->
+                    <div class="flex items-center space-x-2">
+                        <input id="moveSlider" type="range" min="0" max="<?= count($moves) ?>" value="0" 
+                               class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
                     </div>
                 </div>
             </div>
         </div>
         
-        <!-- Informations sur la partie -->
-        <div class="lg:col-span-1">
-            <div class="bg-white rounded-xl shadow-md overflow-hidden mb-6">
-                <div class="bg-purple-100 px-4 py-3 border-b border-purple-200">
-                    <h2 class="text-xl font-semibold text-purple-900">Informations</h2>
-                </div>
-                <div class="p-4">
-                    <div class="space-y-3">
-                        <div class="flex items-center">
-                            <i class="far fa-calendar-alt w-6 text-purple-600"></i>
-                            <span class="font-semibold mr-2">Date :</span>
-                            <span><?php echo htmlspecialchars($formattedDate); ?></span>
-                        </div>
-                        <div class="flex items-center">
-                            <i class="fas fa-chess-pawn w-6 text-black"></i>
+        <!-- Colonne infos -->
+        <div class="bg-white rounded-xl shadow overflow-hidden">
+            <!-- Informations de la partie -->
+            <div class="p-4 border-b">
+                <h2 class="text-xl font-semibold text-purple-900 mb-3">Informations</h2>
+                <p class="mb-2"><span class="font-semibold">Date :</span> <?= h(date('d/m/Y H:i', strtotime($game['created_at']))) ?></p>
+                <p class="mb-2 flex items-center">
                             <span class="font-semibold mr-2">Joueur 1 :</span>
-                            <span><?php echo htmlspecialchars($player1Name); ?> (Noir)</span>
-                        </div>
-                        <div class="flex items-center">
-                            <i class="fas fa-chess-pawn w-6 text-gray-300"></i>
+                    <span class="flex items-center"><?= h($player1Name) ?> <span class="ml-1 inline-block w-3 h-3 bg-black rounded-full"></span></span>
+                </p>
+                <p class="mb-2 flex items-center">
                             <span class="font-semibold mr-2">Joueur 2 :</span>
-                            <span><?php echo htmlspecialchars($player2Name); ?> (Blanc)</span>
-                        </div>
-                        <div class="flex items-center">
-                            <i class="fas fa-info-circle w-6 text-purple-600"></i>
-                            <span class="font-semibold mr-2">Statut :</span>
-                            <span><?php echo htmlspecialchars($statusText); ?></span>
-                        </div>
-                        <div class="flex items-center">
-                            <i class="fas fa-trophy w-6 text-purple-600"></i>
-                            <span class="font-semibold mr-2">Résultat :</span>
-                            <span class="<?php echo $resultClass; ?>"><?php echo htmlspecialchars($resultText); ?></span>
-                        </div>
-                    </div>
-                </div>
+                    <span class="flex items-center"><?= h($player2Name) ?> <span class="ml-1 inline-block w-3 h-3 bg-white border border-black rounded-full"></span></span>
+                </p>
+                <p class="mb-2"><span class="font-semibold">Résultat :</span>
+                    <?php
+                        $txt = ['player1_won'=>'Victoire','player2_won'=>'Défaite','draw'=>'Match nul'][$game['result']];
+                        $color = ['player1_won'=>'text-green-600','player2_won'=>'text-red-600','draw'=>'text-yellow-600'][$game['result']];
+                        if (!$isPlayer1) {
+                            $txt = ['player1_won'=>'Défaite','player2_won'=>'Victoire','draw'=>'Match nul'][$game['result']];
+                            $color = ['player1_won'=>'text-red-600','player2_won'=>'text-green-600','draw'=>'text-yellow-600'][$game['result']];
+                        }
+                    ?>
+                    <span class="<?= $color ?> font-bold"><?= $txt ?></span>
+                </p>
             </div>
             
-            <div class="bg-white rounded-xl shadow-md overflow-hidden">
-                <div class="bg-purple-100 px-4 py-3 border-b border-purple-200">
-                    <h2 class="text-xl font-semibold text-purple-900">Historique des mouvements</h2>
-                </div>
+            <!-- Liste des coups -->
                 <div class="p-4">
-                    <div class="max-h-96 overflow-y-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
-                                    <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joueur</th>
-                                    <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mouvement</th>
-                                </tr>
-                            </thead>
-                            <tbody id="moves-list" class="bg-white divide-y divide-gray-200">
-                                <?php if (empty($moves)): ?>
-                                    <tr>
-                                        <td colspan="3" class="px-3 py-2 text-center text-sm text-gray-500">Aucun mouvement enregistré</td>
-                                    </tr>
-                                <?php endif; ?>
-                            </tbody>
-                        </table>
+                <h2 class="text-xl font-semibold text-purple-900 mb-3">Coups (<?= count($moves) ?>)</h2>
+                <div class="overflow-y-auto max-h-[350px] border border-gray-100 rounded p-1">
+                    <div id="movesList" class="divide-y divide-gray-100">
+                        <!-- Les coups seront insérés ici par JavaScript -->
                     </div>
                 </div>
             </div>
@@ -238,351 +194,368 @@ include_once __DIR__ . '/../../backend/includes/header.php';
     </div>
 </div>
 
+<style>
+.control-btn {
+    padding: 0.4rem 0.75rem;
+    border-radius: 0.375rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+}
+.control-btn:hover {
+    opacity: 0.9;
+}
+.control-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.move-item {
+    padding: 0.5rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.move-item:hover {
+    background-color: #f3f4f6;
+}
+.move-item.active {
+    background-color: #e0e7ff;
+    color: #4f46e5;
+    font-weight: 600;
+}
+</style>
+
+<?php
+// Préparation des données nécessaires au JavaScript
+$gameDataJson = json_encode([
+    'initial' => $initialBoard,
+    'moves'   => $moves,
+    'player1' => [
+        'id' => $game['player1_id'],
+        'name' => $player1Name
+    ],
+    'player2' => [
+        'id' => $game['player2_id'],
+        'name' => $player2Name
+    ],
+]);
+?>
+
+<!-- Script placé à la fin du document -->
 <script>
-// Game data from PHP
-const gameData = <?php echo json_encode([
-    'id' => $gameId,
-    'boardState' => $boardState,
-    'moves' => $moves,
-    'player1_id' => $game['player1_id'],
-    'player2_id' => $game['player2_id']
-]); ?>;
-
-// Board drawing variables
-const canvas = document.getElementById('checkerboard');
-const ctx = canvas.getContext('2d');
-const boardSize = canvas.width;
-const cellSize = boardSize / 8;
-
-// Player colors
-const colors = {
-    board: {
-        dark: '#8B4513', // Dark brown
-        light: '#F5DEB3' // Wheat
-    },
-    pieces: {
-        player1: '#000000', // Black
-        player1King: '#333333', // Dark gray
-        player2: '#FFFFFF', // White
-        player2King: '#EEEEEE'  // Light gray
-    }
+// Configuration et données
+const gameData = <?= $gameDataJson ?>;
+const ANIMATION_SPEED = 300; // ms pour l'animation
+const CELL_COLORS = {
+    dark: '#B58863',   // Retour au marron
+    light: '#F0D9B5'   // Retour au beige
+};
+const PIECE_COLORS = {
+    player1: '#000',
+    player2: '#FFF',
+    player1Stroke: '#444',
+    player2Stroke: '#444'
 };
 
-// Replay variables
-let currentMoveIndex = -1;
-let isPlaying = false;
-let playInterval = null;
+// État du jeu
 let boardStates = [];
+let currentMoveIndex = 0;
+let animationInProgress = false;
+let playInterval = null;
 
-// Initialize the board states array with the initial state
-function initializeBoardStates() {
-    // Create a deep copy of the initial board state
-    const initialState = JSON.parse(JSON.stringify(gameData.boardState));
-    boardStates = [initialState];
-    
-    // Calculate board state after each move
-    if (gameData.moves && gameData.moves.length > 0) {
-        let currentBoard = initialState;
-        
-        gameData.moves.forEach(move => {
-            // Get move positions from the move data
-            const fromRow = move.from_row !== undefined ? move.from_row : parseInt(move.from_position.split(',')[0]);
-            const fromCol = move.from_col !== undefined ? move.from_col : parseInt(move.from_position.split(',')[1]);
-            const toRow = move.to_row !== undefined ? move.to_row : parseInt(move.to_position.split(',')[0]);
-            const toCol = move.to_col !== undefined ? move.to_col : parseInt(move.to_position.split(',')[1]);
-            
-            // Create a deep copy of the current board
-            const newBoard = JSON.parse(JSON.stringify(currentBoard));
-            
-            // Move the piece
-            newBoard[toRow][toCol] = newBoard[fromRow][fromCol];
-            newBoard[fromRow][fromCol] = null;
-            
-            // Handle captures
-            if (move.is_capture || move.captured == 1) {
-                // Calculate capture position (middle point between from and to)
-                const captureRow = fromRow + Math.sign(toRow - fromRow);
-                const captureCol = fromCol + Math.sign(toCol - fromCol);
-                
-                // Remove the captured piece
-                newBoard[captureRow][captureCol] = null;
-            }
-            
-            // Handle promotion to king
-            if ((newBoard[toRow][toCol].player === 1 && toRow === 7) || 
-                (newBoard[toRow][toCol].player === 2 && toRow === 0)) {
-                newBoard[toRow][toCol].type = 'king';
-            }
-            
-            // Add new board state to the array
-            boardStates.push(newBoard);
-            
-            // Update current board for the next move
-            currentBoard = newBoard;
-        });
-    }
-    
-    // Update the moves list
-    updateMovesList();
+// Éléments DOM
+const canvas = document.getElementById('boardCanvas');
+const ctx = canvas.getContext('2d');
+const moveIndicator = document.getElementById('move-indicator');
+const slider = document.getElementById('moveSlider');
+const movesList = document.getElementById('movesList');
+const btnPlay = document.getElementById('btnPlay');
+
+// Fonction d'initialisation
+function init() {
+    console.log("Initialisation du replay...");
+    buildBoardStates();
+    createMovesList();
+    renderBoard(0);
+    setupEventListeners();
 }
 
-// Draw the board
-function drawBoard() {
-    // Draw the checkerboard pattern
+// Construction des états successifs du plateau
+function buildBoardStates() {
+    console.log("Construction des états du plateau...");
+    
+    // État initial - la première rangée commence avec une case claire
+    boardStates = [deepClone(gameData.initial)];
+    
+    // Pour chaque coup, calculer l'état résultant
+    let currentState = deepClone(gameData.initial);
+        
+    gameData.moves.forEach((move, index) => {
+        try {
+            // Extraction des coordonnées
+            const fromRow = getCoordinate(move, 'from_row', 'from_position', 0);
+            const fromCol = getCoordinate(move, 'from_col', 'from_position', 1);
+            const toRow = getCoordinate(move, 'to_row', 'to_position', 0);
+            const toCol = getCoordinate(move, 'to_col', 'to_position', 1);
+            
+            // Clonage de l'état actuel
+            const newState = deepClone(currentState);
+            
+            // Déplacement de la pièce
+            newState[toRow][toCol] = newState[fromRow][fromCol];
+            newState[fromRow][fromCol] = null;
+            
+            // Gestion des captures
+            if (move.captured || move.is_capture) {
+                // Calcul des coordonnées de la pièce capturée
+                const capturedRow = fromRow + Math.sign(toRow - fromRow);
+                const capturedCol = fromCol + Math.sign(toCol - fromCol);
+                newState[capturedRow][capturedCol] = null;
+            }
+            
+            // Promotion en dame
+            if (newState[toRow][toCol]) {
+                if ((newState[toRow][toCol].player === 1 && toRow === 7) || 
+                    (newState[toRow][toCol].player === 2 && toRow === 0)) {
+                    newState[toRow][toCol].type = 'king';
+                }
+            }
+            
+            // Ajout de l'état au tableau
+            boardStates.push(newState);
+            currentState = newState;
+        } catch (e) {
+            console.error(`Erreur au coup ${index}:`, e, move);
+        }
+    });
+    
+    console.log(`${boardStates.length} états de plateau générés.`);
+}
+
+// Récupère une coordonnée depuis un objet de mouvement
+function getCoordinate(move, directProp, positionProp, index) {
+    if (move[directProp] !== undefined) {
+        return parseInt(move[directProp]);
+    } else if (move[positionProp]) {
+        const parts = move[positionProp].split(',');
+        if (parts.length > index) {
+            return parseInt(parts[index]);
+        }
+    }
+    throw new Error(`Impossible de trouver la coordonnée ${directProp}/${positionProp}[${index}]`);
+}
+
+// Clone profondément un objet
+function deepClone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+}
+
+// Crée la liste des coups cliquables
+function createMovesList() {
+    // Coup initial (position de départ)
+    const initialItem = document.createElement('div');
+    initialItem.className = 'move-item active';
+    initialItem.dataset.index = 0;
+    initialItem.innerHTML = `<strong>Position initiale</strong>`;
+    initialItem.addEventListener('click', () => goToMove(0));
+    movesList.appendChild(initialItem);
+    
+    // Liste des coups
+    gameData.moves.forEach((move, index) => {
+        const moveItem = document.createElement('div');
+        moveItem.className = 'move-item';
+        moveItem.dataset.index = index + 1;
+        
+        // Joueur qui a fait le coup
+        const playerId = move.player_id || move.user_id;
+        const playerName = playerId == gameData.player1.id ? 
+                          gameData.player1.name : gameData.player2.name;
+        const playerNumber = playerId == gameData.player1.id ? 1 : 2;
+        
+        // Position d'origine
+        const fromPos = move.from_position || 
+                       `${move.from_row},${move.from_col}`;
+        
+        // Position de destination
+        const toPos = move.to_position || 
+                     `${move.to_row},${move.to_col}`;
+        
+        // Marqueur de capture
+        const captureMarker = move.captured || move.is_capture ? 
+                             ' <span class="text-red-500 font-bold">x</span>' : '';
+        
+        moveItem.innerHTML = `
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <span class="inline-block w-2 h-2 rounded-full mr-2 ${playerNumber === 1 ? 'bg-black' : 'bg-white border border-black'}"></span>
+                    <span class="font-medium">${playerName}</span>
+                </div>
+                <div class="text-sm text-gray-700">
+                    ${fromPos} → ${toPos}${captureMarker}
+                </div>
+            </div>
+        `;
+        
+        moveItem.addEventListener('click', () => goToMove(index + 1));
+        movesList.appendChild(moveItem);
+    });
+}
+
+// Configuration des écouteurs d'événements
+function setupEventListeners() {
+    // Boutons de navigation
+    document.getElementById('btnFirst').addEventListener('click', () => goToMove(0));
+    document.getElementById('btnPrev').addEventListener('click', () => goToMove(currentMoveIndex - 1));
+    document.getElementById('btnNext').addEventListener('click', () => goToMove(currentMoveIndex + 1));
+    document.getElementById('btnLast').addEventListener('click', () => goToMove(boardStates.length - 1));
+    
+    // Slider
+    slider.addEventListener('input', (e) => goToMove(parseInt(e.target.value)));
+    
+    // Bouton Play/Pause
+    btnPlay.addEventListener('click', togglePlayPause);
+    }
+    
+// Alterne lecture/pause
+function togglePlayPause() {
+    if (playInterval) {
+        clearInterval(playInterval);
+        playInterval = null;
+        btnPlay.innerHTML = '▶ Lecture';
+        btnPlay.classList.replace('bg-red-600', 'bg-green-600');
+    } else {
+        // Si on est à la fin, revenir au début
+        if (currentMoveIndex >= boardStates.length - 1) {
+            goToMove(0);
+        }
+        
+        // Démarrer la lecture automatique
+        playInterval = setInterval(() => {
+            if (currentMoveIndex < boardStates.length - 1) {
+                goToMove(currentMoveIndex + 1);
+            } else {
+                togglePlayPause(); // S'arrêter à la fin
+            }
+        }, 1000);
+        
+        btnPlay.innerHTML = '⏸ Pause';
+        btnPlay.classList.replace('bg-green-600', 'bg-red-600');
+    }
+}
+
+// Va à un mouvement spécifique
+function goToMove(index) {
+    // Empêcher les actions pendant une animation
+    if (animationInProgress) return;
+    
+    // Bornes
+    index = Math.max(0, Math.min(index, boardStates.length - 1));
+    
+    // Si c'est le même coup, ne rien faire
+    if (index === currentMoveIndex) return;
+    
+    // Mettre à jour l'index actuel
+    currentMoveIndex = index;
+    
+    // Mettre à jour l'interface
+    updateUI();
+    
+    // Rendu du plateau
+    renderBoard(index);
+}
+
+// Met à jour l'interface utilisateur
+function updateUI() {
+    // Mise à jour du slider
+    slider.value = currentMoveIndex;
+    
+    // Mise à jour de l'indicateur de coup
+    moveIndicator.textContent = `Coup ${currentMoveIndex} / ${boardStates.length - 1}`;
+    
+    // Mise à jour de la liste des coups
+    document.querySelectorAll('#movesList .move-item').forEach(item => {
+        if (parseInt(item.dataset.index) === currentMoveIndex) {
+            item.classList.add('active');
+            // Faire défiler jusqu'à l'élément actif
+            item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+            item.classList.remove('active');
+        }
+    });
+    
+    // Activer/désactiver les boutons selon la position
+    document.getElementById('btnFirst').disabled = currentMoveIndex === 0;
+    document.getElementById('btnPrev').disabled = currentMoveIndex === 0;
+    document.getElementById('btnNext').disabled = currentMoveIndex === boardStates.length - 1;
+    document.getElementById('btnLast').disabled = currentMoveIndex === boardStates.length - 1;
+}
+
+// Rendu du plateau
+function renderBoard(index) {
+    const board = boardStates[index];
+    const cellSize = canvas.width / 8;
+    
+    // Effacer le canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Dessiner les cases
     for (let row = 0; row < 8; row++) {
         for (let col = 0; col < 8; col++) {
-            const isLightSquare = (row + col) % 2 === 0;
-            ctx.fillStyle = isLightSquare ? colors.board.light : colors.board.dark;
-            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+            drawCell(row, col, cellSize);
+            
+            // Dessiner la pièce si elle existe
+            if (board[row][col]) {
+                drawPiece(row, col, board[row][col], cellSize);
+            }
         }
     }
 }
 
-// Draw a piece
-function drawPiece(row, col, player, isKing) {
+// Dessine une case du plateau
+function drawCell(row, col, cellSize) {
+    // Sur un plateau de dames standard, les cases foncées sont en bas à droite
+    // quand la rangée + colonne est impaire
+    ctx.fillStyle = (row + col) % 2 === 1 ? CELL_COLORS.dark : CELL_COLORS.light;
+            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+}
+
+// Dessine une pièce sur le plateau
+function drawPiece(row, col, piece, cellSize) {
     const x = col * cellSize + cellSize / 2;
     const y = row * cellSize + cellSize / 2;
     const radius = cellSize * 0.4;
     
-    // Draw the piece body
+    // Couleur de la pièce
+    ctx.fillStyle = piece.player === 1 ? PIECE_COLORS.player1 : PIECE_COLORS.player2;
+    
+    // Dessin du cercle
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = player === 1 ? 
-        (isKing ? colors.pieces.player1King : colors.pieces.player1) : 
-        (isKing ? colors.pieces.player2King : colors.pieces.player2);
     ctx.fill();
     
-    // Add a border
-    ctx.strokeStyle = player === 1 ? '#555555' : '#888888';
+    // Bordure
+    ctx.strokeStyle = piece.player === 1 ? PIECE_COLORS.player1Stroke : PIECE_COLORS.player2Stroke;
     ctx.lineWidth = 2;
     ctx.stroke();
     
-    // Add a crown for kings
-    if (isKing) {
-        ctx.beginPath();
-        ctx.fillStyle = player === 1 ? '#DDDDDD' : '#333333';
-        const crownSize = radius * 0.6;
-        
-        // Draw a simple crown
-        ctx.font = `bold ${crownSize}px Arial`;
+    // Si c'est une dame, ajouter une couronne
+    if (piece.type === 'king') {
+        ctx.fillStyle = piece.player === 1 ? '#FFF' : '#000';
+        ctx.font = `bold ${radius * 0.9}px serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('♔', x, y);
     }
 }
 
-// Draw the current board state
-function drawBoardState(boardState) {
-    // Clear the canvas
-    ctx.clearRect(0, 0, boardSize, boardSize);
+// Initialiser le replay quand le DOM est chargé
+document.addEventListener('DOMContentLoaded', init);
     
-    // Draw the board
-    drawBoard();
-    
-    // Draw the pieces
-    for (let row = 0; row < 8; row++) {
-        for (let col = 0; col < 8; col++) {
-            const piece = boardState[row][col];
-            if (piece !== null) {
-                const isKing = piece.type === 'king';
-                drawPiece(row, col, piece.player, isKing);
-            }
-        }
+// Sécurité pour s'assurer que le canvas est chargé
+setTimeout(() => {
+    if (boardStates.length > 0 && currentMoveIndex === 0) {
+        renderBoard(0);
     }
-}
-
-// Update the list of moves in the UI
-function updateMovesList() {
-    const movesList = document.getElementById('moves-list');
-    movesList.innerHTML = '';
-    
-    if (gameData.moves && gameData.moves.length > 0) {
-        gameData.moves.forEach((move, index) => {
-            // Get move positions from the move data
-            const fromRow = move.from_row !== undefined ? move.from_row : parseInt(move.from_position.split(',')[0]);
-            const fromCol = move.from_col !== undefined ? move.from_col : parseInt(move.from_position.split(',')[1]);
-            const toRow = move.to_row !== undefined ? move.to_row : parseInt(move.to_position.split(',')[0]);
-            const toCol = move.to_col !== undefined ? move.to_col : parseInt(move.to_position.split(',')[1]);
-            
-            const tr = document.createElement('tr');
-            tr.className = index === currentMoveIndex ? 'bg-purple-100' : 'hover:bg-purple-50 cursor-pointer';
-            tr.id = `move-${index}`;
-            
-            // Convert row/col to chess-like notation (a8, b6, etc.)
-            const fromNotation = String.fromCharCode(97 + fromCol) + (8 - fromRow);
-            const toNotation = String.fromCharCode(97 + toCol) + (8 - toRow);
-            
-            tr.innerHTML = `
-                <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900">${index + 1}</td>
-                <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900">${move.player_id == gameData.player1_id ? 'Joueur 1' : 'Joueur 2'}</td>
-                <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
-                    ${fromNotation} → ${toNotation}
-                    ${(move.is_capture || move.captured == 1) ? '<span class="text-red-500">(capture)</span>' : ''}
-                </td>
-            `;
-            
-            // Add click event to jump to this move
-            tr.addEventListener('click', () => {
-                goToMove(index);
-            });
-            
-            movesList.appendChild(tr);
-        });
-    } else {
-        movesList.innerHTML = '<tr><td colspan="3" class="px-3 py-2 text-center text-sm text-gray-500">Aucun mouvement enregistré</td></tr>';
-    }
-    
-    // Update progress bar
-    updateProgressBar();
-}
-
-// Update the progress bar
-function updateProgressBar() {
-    const progressBar = document.getElementById('progress-bar');
-    const totalMoves = gameData.moves.length;
-    
-    if (totalMoves > 0) {
-        const progress = ((currentMoveIndex + 1) / totalMoves) * 100;
-        progressBar.style.width = `${progress}%`;
-    } else {
-        progressBar.style.width = '0%';
-    }
-}
-
-// Go to a specific move
-function goToMove(index) {
-    // Ensure index is within bounds
-    index = Math.max(-1, Math.min(index, boardStates.length - 2));
-    
-    // Update current move index
-    currentMoveIndex = index;
-    
-    // Draw the board state
-    drawBoardState(boardStates[index + 1]); // +1 because boardStates[0] is the initial state
-    
-    // Update the moves list (highlight current move)
-    const moveElements = document.querySelectorAll('#moves-list tr');
-    moveElements.forEach((el, i) => {
-        if (i === index) {
-            el.className = 'bg-purple-100';
-        } else {
-            el.className = 'hover:bg-purple-50 cursor-pointer';
-        }
-    });
-    
-    // Scroll to the current move
-    if (index >= 0) {
-        const currentMoveEl = document.getElementById(`move-${index}`);
-        if (currentMoveEl) {
-            currentMoveEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-    }
-    
-    // Update progress bar
-    updateProgressBar();
-}
-
-// Button event handlers
-document.getElementById('btn-first-move').addEventListener('click', () => {
-    stopPlayback();
-    goToMove(-1); // Initial state
-});
-
-document.getElementById('btn-prev-move').addEventListener('click', () => {
-    stopPlayback();
-    goToMove(currentMoveIndex - 1);
-});
-
-document.getElementById('btn-next-move').addEventListener('click', () => {
-    stopPlayback();
-    goToMove(currentMoveIndex + 1);
-});
-
-document.getElementById('btn-last-move').addEventListener('click', () => {
-    stopPlayback();
-    goToMove(boardStates.length - 2); // Last move
-});
-
-document.getElementById('btn-play-pause').addEventListener('click', () => {
-    if (isPlaying) {
-        stopPlayback();
-    } else {
-        startPlayback();
-    }
-});
-
-// Start auto-playback
-function startPlayback() {
-    if (isPlaying) return;
-    
-    isPlaying = true;
-    
-    // Update button appearance
-    const button = document.getElementById('btn-play-pause');
-    button.innerHTML = '<i class="fas fa-pause mr-1"></i> Pause';
-    button.classList.remove('bg-green-600', 'hover:bg-green-700');
-    button.classList.add('bg-yellow-600', 'hover:bg-yellow-700');
-    
-    // Start from the beginning if at the end
-    if (currentMoveIndex >= boardStates.length - 2) {
-        goToMove(-1);
-    }
-    
-    // Start the playback interval
-    playInterval = setInterval(() => {
-        if (currentMoveIndex < boardStates.length - 2) {
-            goToMove(currentMoveIndex + 1);
-        } else {
-            stopPlayback();
-        }
-    }, 1000); // 1 second between moves
-}
-
-// Stop auto-playback
-function stopPlayback() {
-    if (!isPlaying) return;
-    
-    isPlaying = false;
-    
-    // Update button appearance
-    const button = document.getElementById('btn-play-pause');
-    button.innerHTML = '<i class="fas fa-play mr-1"></i> Lecture';
-    button.classList.remove('bg-yellow-600', 'hover:bg-yellow-700');
-    button.classList.add('bg-green-600', 'hover:bg-green-700');
-    
-    // Clear the playback interval
-    if (playInterval) {
-        clearInterval(playInterval);
-        playInterval = null;
-    }
-}
-
-// Initialize the replay
-function initReplay() {
-    // Make sure the board state is properly initialized
-    if (!gameData.boardState || gameData.boardState.length === 0) {
-        console.error("Erreur: État du plateau non disponible");
-        
-        // Create a default empty board
-        gameData.boardState = [];
-        for (let i = 0; i < 8; i++) {
-            gameData.boardState[i] = [];
-            for (let j = 0; j < 8; j++) {
-                gameData.boardState[i][j] = null;
-            }
-        }
-    }
-    
-    initializeBoardStates();
-    drawBoardState(boardStates[0]); // Draw initial state
-    goToMove(-1); // Start at initial state
-}
-
-// Initialize when the page loads
-window.addEventListener('load', initReplay);
+}, 100);
 </script>
 
-<?php
-// Include the footer
-include_once __DIR__ . '/../../backend/includes/footer.php';
-?> 
+<?php include __DIR__ . '/../../backend/includes/footer.php'; ?> 

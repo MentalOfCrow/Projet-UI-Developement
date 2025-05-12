@@ -46,7 +46,7 @@ function initializeExampleGames() {
             2 => 'Joueur2',
             3 => 'Joueur3',
             4 => 'Joueur4',
-            0 => 'Intelligence Artificielle' // ID 0 réservé pour l'IA
+            0 => 'Joueur' // ID 0 réservé pour l'IA (affiché comme joueur par défaut)
         ];
         
         // Types de parties: victoire, défaite, match nul et partie en cours
@@ -340,7 +340,7 @@ function getResultInfo($game, $userId) {
                 
                 // Pour les parties contre l'IA
                 if ($opponentId == 0) {
-                    $opponentName = 'Intelligence Artificielle';
+                    $opponentName = 'Joueur';
                 }
                 
                 // Get status and result information
@@ -400,7 +400,7 @@ function getResultInfo($game, $userId) {
                                         </a>
                                     <?php else: ?>
                                         <span class="text-gray-800 flex items-center">
-                                            <i class="fas fa-robot mr-1 text-purple-500"></i>
+                                            <i class="fas fa-user mr-1 text-purple-500"></i>
                                             <?php echo htmlspecialchars($opponentName); ?>
                                         </span>
                                     <?php endif; ?>

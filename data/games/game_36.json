@@ -1,0 +1,232 @@
+{
+    "id": 36,
+    "player1_id": 5,
+    "player2_id": 0,
+    "current_player": 2,
+    "board_state": "[[null, {\"type\": \"pawn\", \"player\": 1}, null, {\"type\": \"pawn\", \"player\": 1}, null, {\"type\": \"pawn\", \"player\": 1}, null, {\"type\": \"pawn\", \"player\": 1}], [{\"type\": \"pawn\", \"player\": 1}, null, {\"type\": \"pawn\", \"player\": 1}, null, {\"type\": \"pawn\", \"player\": 1}, null, {\"type\": \"pawn\", \"player\": 1}, null], [null, {\"type\": \"pawn\", \"player\": 1}, null, null, null, {\"type\": \"pawn\", \"player\": 1}, null, {\"type\": \"pawn\", \"player\": 1}], [null, null, null, null, {\"type\": \"pawn\", \"player\": 1}, null, null, null], [null, null, null, null, null, null, null, null], [{\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null], [null, {\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}], [{\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null, {\"type\": \"pawn\", \"player\": 2}, null]]",
+    "status": "in_progress",
+    "winner_id": null,
+    "created_at": "2025-05-12 15:06:18",
+    "updated_at": "2025-05-12 15:06:27",
+    "player1_name": "b",
+    "player2_name": "Joueur",
+    "moves": [
+        {
+            "user_id": "5",
+            "from_position": "2,3",
+            "to_position": "3,4",
+            "captured": 0,
+            "played_at": "2025-05-12 15:06:27"
+        },
+        {
+            "user_id": "0",
+            "from_position": "5,0",
+            "to_position": "4,1",
+            "captured": 0,
+            "played_at": "2025-05-12 15:06:27"
+        },
+        {
+            "user_id": "5",
+            "from_position": "2,1",
+            "to_position": "3,0",
+            "captured": 0,
+            "played_at": "2025-05-12 15:06:30"
+        },
+        {
+            "user_id": "0",
+            "from_position": "4,1",
+            "to_position": "3,2",
+            "captured": 0,
+            "played_at": "2025-05-12 15:06:30"
+        },
+        {
+            "user_id": "5",
+            "from_position": "1,2",
+            "to_position": "2,1",
+            "captured": 0,
+            "played_at": "2025-05-12 15:06:32"
+        },
+        {
+            "user_id": "0",
+            "from_position": "5,6",
+            "to_position": "4,7",
+            "captured": 0,
+            "played_at": "2025-05-12 15:06:32"
+        },
+        {
+            "user_id": "5",
+            "from_position": "2,1",
+            "to_position": "4,3",
+            "captured": 1,
+            "played_at": "2025-05-12 15:06:44"
+        },
+        {
+            "user_id": "0",
+            "from_position": "5,4",
+            "to_position": "3,2",
+            "captured": 1,
+            "played_at": "2025-05-12 15:06:44"
+        },
+        {
+            "user_id": "5",
+            "from_position": "3,4",
+            "to_position": "4,5",
+            "captured": 0,
+            "played_at": "2025-05-12 15:06:46"
+        },
+        {
+            "user_id": "0",
+            "from_position": "5,2",
+            "to_position": "4,3",
+            "captured": 0,
+            "played_at": "2025-05-12 15:06:46"
+        },
+        {
+            "user_id": "5",
+            "from_position": "0,3",
+            "to_position": "1,2",
+            "captured": 0,
+            "played_at": "2025-05-12 15:06:49"
+        },
+        {
+            "user_id": "0",
+            "from_position": "6,1",
+            "to_position": "5,2",
+            "captured": 0,
+            "played_at": "2025-05-12 15:06:49"
+        },
+        {
+            "user_id": "5",
+            "from_position": "1,2",
+            "to_position": "2,1",
+            "captured": 0,
+            "played_at": "2025-05-12 15:06:51"
+        },
+        {
+            "user_id": "0",
+            "from_position": "4,7",
+            "to_position": "3,6",
+            "captured": 0,
+            "played_at": "2025-05-12 15:06:51"
+        },
+        {
+            "user_id": "5",
+            "from_position": "2,5",
+            "to_position": "4,7",
+            "captured": 1,
+            "played_at": "2025-05-12 15:06:54"
+        },
+        {
+            "user_id": "0",
+            "from_position": "6,3",
+            "to_position": "5,4",
+            "captured": 0,
+            "played_at": "2025-05-12 15:06:54"
+        },
+        {
+            "user_id": "5",
+            "from_position": "4,5",
+            "to_position": "6,3",
+            "captured": 1,
+            "played_at": "2025-05-12 15:06:58"
+        },
+        {
+            "user_id": "5",
+            "from_position": "6,3",
+            "to_position": "4,1",
+            "captured": 1,
+            "played_at": "2025-05-12 15:07:00"
+        },
+        {
+            "user_id": "5",
+            "from_position": "4,1",
+            "to_position": "2,3",
+            "captured": 1,
+            "played_at": "2025-05-12 15:07:06"
+        },
+        {
+            "user_id": "0",
+            "from_position": "7,4",
+            "to_position": "6,3",
+            "captured": 0,
+            "played_at": "2025-05-12 15:07:06"
+        },
+        {
+            "user_id": "5",
+            "from_position": "2,3",
+            "to_position": "3,4",
+            "captured": 0,
+            "played_at": "2025-05-12 15:07:11"
+        },
+        {
+            "user_id": "0",
+            "from_position": "4,3",
+            "to_position": "2,5",
+            "captured": 1,
+            "played_at": "2025-05-12 15:07:11"
+        },
+        {
+            "user_id": "0",
+            "from_position": "2,5",
+            "to_position": "0,3",
+            "captured": 1,
+            "played_at": "2025-05-12 15:07:11"
+        },
+        {
+            "user_id": "5",
+            "from_position": "1,6",
+            "to_position": "2,5",
+            "captured": 0,
+            "played_at": "2025-05-12 15:07:16"
+        },
+        {
+            "user_id": "0",
+            "from_position": "0,3",
+            "to_position": "3,6",
+            "captured": 1,
+            "played_at": "2025-05-12 15:07:16"
+        },
+        {
+            "user_id": "5",
+            "from_position": "2,7",
+            "to_position": "4,5",
+            "captured": 1,
+            "played_at": "2025-05-12 15:07:18"
+        },
+        {
+            "user_id": "0",
+            "from_position": "7,0",
+            "to_position": "6,1",
+            "captured": 0,
+            "played_at": "2025-05-12 15:07:18"
+        },
+        {
+            "user_id": "5",
+            "from_position": "4,5",
+            "to_position": "5,6",
+            "captured": 0,
+            "played_at": "2025-05-12 15:07:20"
+        },
+        {
+            "user_id": "0",
+            "from_position": "6,7",
+            "to_position": "4,5",
+            "captured": 1,
+            "played_at": "2025-05-12 15:07:20"
+        },
+        {
+            "user_id": "5",
+            "from_position": "0,5",
+            "to_position": "1,6",
+            "captured": 0,
+            "played_at": "2025-05-12 15:07:43"
+        },
+        {
+            "user_id": "0",
+            "from_position": "6,1",
+            "to_position": "5,2",
+            "captured": 0,
+            "played_at": "2025-05-12 15:07:43"
+        }
+    ]
+}

@@ -140,7 +140,7 @@ $pageTitle = "Partie #" . $game_id . " - " . APP_NAME;
                                 <?php echo htmlspecialchars($gameData['game']['player2_name'] ?? ''); ?>
                             </span>
                             <span class="ml-2 px-2 py-1 text-xs rounded bg-indigo-100 text-indigo-800">
-                                <?php echo $opponentIsBot ? 'IA' : 'Joueur 2'; ?>
+                                <?php echo $opponentIsBot ? 'Joueur' : 'Joueur 2'; ?>
                             </span>
                         </div>
                     </div>
@@ -243,6 +243,24 @@ $pageTitle = "Partie #" . $game_id . " - " . APP_NAME;
                         <div id="moveIndicators"></div>
                     </div>
                 </div>
+            </div>
+        </div>
+        <!-- Ajout du panneau de chat -->
+        <div class="md:col-span-1 md:order-last order-first">
+            <div class="bg-white shadow-md rounded-lg p-4 flex flex-col h-[24rem] md:h-[34rem]">
+                <h3 class="text-lg font-bold text-indigo-700 mb-2 flex items-center gap-2"><i class="fas fa-comments"></i> Chat</h3>
+                <div id="chat-messages" class="relative flex-1 min-h-[10rem] max-h-[18rem] overflow-y-auto mb-3 space-y-2 px-3 py-2 bg-gray-50 rounded border border-gray-200 scroll-smooth"></div>
+                <!-- Ligne d'actions rapides -->
+                <div class="flex space-x-2 mb-1">
+                    <button class="quick-msg bg-gray-200 hover:bg-gray-300 rounded-full w-8 h-8 flex items-center justify-center">👍</button>
+                    <button class="quick-msg bg-gray-200 hover:bg-gray-300 rounded-full w-8 h-8 flex items-center justify-center">😂</button>
+                    <button class="quick-msg bg-gray-200 hover:bg-gray-300 rounded-full w-8 h-8 flex items-center justify-center">😮</button>
+                    <button class="quick-msg bg-gray-200 hover:bg-gray-300 rounded-full px-2 text-xs font-semibold">GG</button>
+                </div>
+                <form id="chat-form" class="flex">
+                    <input type="text" id="chat-input" class="flex-1 border rounded-l-lg px-2 py-1 focus:ring-purple-500 focus:border-purple-500" placeholder="Votre message..." autocomplete="off" />
+                    <button class="bg-purple-600 hover:bg-purple-700 text-white px-4 rounded-r-lg">Envoyer</button>
+                </form>
             </div>
         </div>
     </div>
@@ -836,6 +854,245 @@ document.addEventListener('DOMContentLoaded', function() {
         
         gameOverModal.classList.remove('hidden');
     }
+
+    const chatMessages = document.getElementById('chat-messages');
+    const chatForm = document.getElementById('chat-form');
+    const chatInput = document.getElementById('chat-input');
+    let lastTimestamp = 0;
+
+    function appendMessage(msg) {
+        const wrapper = document.createElement('div');
+        const isMine = parseInt(msg.user_id) === currentUserId;
+        wrapper.className = `flex ${isMine ? 'justify-end' : 'justify-start'}`;
+        const bubble = document.createElement('div');
+        bubble.className = `relative max-w-[80%] px-4 py-2.5 rounded-lg text-base shadow leading-normal ${isMine ? 'bg-purple-600 text-white rounded-br-none after:border-l-purple-600' : 'bg-gray-200 text-gray-800 rounded-bl-none after:border-r-gray-200'}`;
+        bubble.innerHTML = `<span class='font-semibold mr-1'>${msg.username}</span>${msg.message}`;
+        bubble.style.wordWrap = 'break-word';
+        // Petite flèche
+        bubble.classList.add('after:absolute','after:top-2.5','after:border-8','after:border-transparent');
+        if(isMine){
+            bubble.classList.add('after:right-[-16px]','after:border-l-8');
+        }else{
+            bubble.classList.add('after:left-[-16px]','after:border-r-8');
+        }
+        wrapper.appendChild(bubble);
+        chatMessages.appendChild(wrapper);
+        if(nearBottom()){
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        } else {
+            scrollBtn.classList.remove('hidden');
+        }
+    }
+
+    function fetchChat() {
+        fetch(`/api/game/chat.php?action=get&game_id=${game_id}&since=${lastTimestamp}`)
+            .then(r => r.json())
+            .then(d => {
+                if (d.success && Array.isArray(d.messages)) {
+                    d.messages.forEach(m => {
+                        appendMessage(m);
+                        lastTimestamp = Math.max(lastTimestamp, m.timestamp);
+                    });
+                }
+            })
+            .catch(console.error);
+    }
+
+    setInterval(fetchChat, 2000);
+    fetchChat();
+
+    chatForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const text = chatInput.value.trim();
+        if (!text) return;
+        fetch(`/api/game/chat.php?action=send&game_id=${game_id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text })
+        }).then(r => r.json()).then(d => {
+            if (d.success) {
+                chatInput.value = '';
+                fetchChat();
+            }
+        });
+    });
+
+    // ----- QUICK EMOJI BUTTONS -----
+    document.querySelectorAll('.quick-msg').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const txt = btn.textContent.trim();
+            chatInput.value = txt;
+            chatForm.dispatchEvent(new Event('submit'));
+        });
+    });
+
+    // ----- SONS AVEC FICHIERS AUDIO (style chess.com) -----
+    const moveSound = new Audio('https://cdn.jsdelivr.net/gh/ornicar/lila@master/public/sound/move.mp3');
+    moveSound.volume = 0.6;
+
+    const chatPing = new Audio('https://cdn.jsdelivr.net/gh/thatoddmailbox/chess-sounds@master/notify.mp3');
+    chatPing.volume = 0.6;
+
+    // fallback WebAudio en cas d'échec de chargement
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      
+    function playTone(freq, type='sine', attack=0.01, release=0.2, gainVal=0.4){
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, now);
+        gainNode.gain.setValueAtTime(0.0001, now);
+        gainNode.gain.linearRampToValueAtTime(gainVal, now + attack);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + release);
+        osc.connect(gainNode).connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + release + 0.05);
+    }
+
+    function notifyChat(){
+        chatPing.currentTime = 0;
+        chatPing.play().catch(()=>{playTone(650,'triangle',0.005,0.15,0.3);});
+    }
+
+    function notifyMove(){
+        moveSound.currentTime = 0;
+        moveSound.play().catch(()=>{playTone(180,'square',0.005,0.25,0.45);});
+    }
+
+    // jouer le son lorsqu'un déplacement est confirmé côté client
+    const originalMakeMove = (typeof makeMove === 'function') ? makeMove : null;
+    if(originalMakeMove){
+        makeMove = function(move){
+            originalMakeMove(move);
+            notifyMove();
+        };
+    }
+
+    // Wrap appendMessage to trigger system notification
+    const _appendMsgFn = appendMessage;
+    appendMessage = function(m){
+        _appendMsgFn(m);
+        if(parseInt(m.user_id)!==currentUserId){
+            notifyChat();
+            showNotif(`${m.username}: ${m.message}`);
+        }
+    };
+
+    // Notify when it becomes user's turn
+    const pollInterval = setInterval(() => {
+        fetch(`/api/game/status.php?game_id=${game_id}`)
+            .then(r=>r.json())
+            .then(d=>{
+                if(d.success && d.game.current_player === userPlayer){
+                    showNotif('À votre tour de jouer !');
+                }
+            }).catch(()=>{});
+    }, 8000);
+
+    // ----------------------------------------
+    // DARK THEME & NOTIFICATIONS ENHANCEMENTS
+    // ----------------------------------------
+    // Inject toggle button
+    const themeBtn = document.createElement('button');
+    themeBtn.id = 'themeToggle';
+    themeBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m8.66-13.66l-.71.71M4.05 19.95l-.71-.71M21 12h-1M4 12H3m16.66 4.95l-.71-.71M4.05 4.05l-.71.71M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>`;
+    themeBtn.className = 'fixed bottom-4 right-4 bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-full shadow-lg focus:outline-none';
+    document.body.appendChild(themeBtn);
+
+    // Apply saved theme
+    if(localStorage.getItem('themeDark')==='1'){ document.body.classList.add('theme-dark'); changeThemeIcon(); }
+
+    themeBtn.addEventListener('click', () => {
+        document.body.classList.toggle('theme-dark');
+        const isDark = document.body.classList.contains('theme-dark');
+        localStorage.setItem('themeDark', isDark ? '1' : '0');
+        changeThemeIcon();
+    });
+
+    function changeThemeIcon(){
+        const isDark = document.body.classList.contains('theme-dark');
+        themeBtn.innerHTML = isDark
+            ? `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3a9 9 0 000 18 9 9 0 010-18z" /></svg>`
+            : `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m8.66-13.66l-.71.71M4.05 19.95l-.71-.71M21 12h-1M4 12H3m16.66 4.95l-.71-.71M4.05 4.05l-.71.71M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>`;
+    }
+
+    // Browser notifications permission
+    let notifGranted = false;
+    if ("Notification" in window) {
+        if(Notification.permission === 'granted') notifGranted = true;
+        else if(Notification.permission !== 'denied'){
+            Notification.requestPermission().then(p => { notifGranted = p==='granted'; });
+        }
+    }
+
+    function showNotif(text){
+        if(notifGranted && document.hidden){
+            try{ new Notification('Jeu de Dames', { body: text, icon: '/assets/img/icon-192.png' }); }catch(e){ console.warn(e); }
+        }
+    }
+
+    let lastMoveId = 0;
+    function fetchMoves(){
+        fetch(`/api/game/moves.php?game_id=${game_id}&last_id=${lastMoveId}`)
+            .then(r=>r.json())
+            .then(d=>{
+                if(d.success&&Array.isArray(d.moves)&&d.moves.length){
+                    const panel=document.getElementById('moves-panel');
+                    if(panel){
+                        d.moves.forEach(m=>{
+                            const line=document.createElement('div');
+                            line.textContent=`${m.username}: (${m.from_row},${m.from_col}) ➜ (${m.to_row},${m.to_col})`;
+                            panel.appendChild(line);
+                            lastMoveId=Math.max(lastMoveId, m.id);
+                        });
+                        panel.scrollTop=panel.scrollHeight;
+                    }
+                }
+            }).catch(()=>{});
+    }
+    setInterval(fetchMoves, 3000);
+    fetchMoves();
+
+    // ------------- BOARD FLIP -------------
+    const flipBtn=document.createElement('button');
+    flipBtn.className='absolute top-2 right-2 bg-gray-800 bg-opacity-70 text-white rounded-full p-1 hover:bg-opacity-90';
+    flipBtn.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.818 9H20v-5M4 4l16 16" /></svg>';
+    document.getElementById('board').appendChild(flipBtn);
+
+    const boardEl=document.getElementById('board');
+    function applyFlip(flip){
+        if(flip){boardEl.classList.add('board-flipped');}
+        else{boardEl.classList.remove('board-flipped');}
+        localStorage.setItem('boardFlip'+game_id, flip?'1':'0');
+    }
+    // default orientation: player2 gets flipped
+    const storedFlip=localStorage.getItem('boardFlip'+game_id);
+    const initialFlip = storedFlip!==null ? storedFlip==='1' : (userPlayer===2);
+    applyFlip(initialFlip);
+
+    flipBtn.addEventListener('click', ()=>{
+        applyFlip(!boardEl.classList.contains('board-flipped'));
+    });
+
+    // ----- AUTO-SCROLL & BOUTON "DERNIERS MESSAGES" -----
+    const scrollBtn = document.createElement('button');
+    scrollBtn.id = 'scrollBottomBtn';
+    scrollBtn.className = 'hidden absolute bottom-2 right-2 bg-purple-600 text-white w-8 h-8 rounded-full shadow flex items-center justify-center focus:outline-none';
+    scrollBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 16l6-6H6z"/></svg>';
+    chatMessages.appendChild(scrollBtn);
+
+    scrollBtn.addEventListener('click', ()=>{
+        chatMessages.scrollTo({top: chatMessages.scrollHeight, behavior: 'smooth'});
+    });
+
+    function nearBottom(){
+        return chatMessages.scrollHeight - (chatMessages.scrollTop + chatMessages.clientHeight) < 40;
+    }
+
+    chatMessages.addEventListener('scroll', ()=>{
+        scrollBtn.classList.toggle('hidden', nearBottom());
+    });
 });
 
 // Fonction pour abandonner la partie via le bouton Abandonner
@@ -881,6 +1138,17 @@ function abandonGame() {
     50% { opacity: 0.8; transform: scale(1.05); }
     100% { opacity: 0.6; transform: scale(0.95); }
 }
+
+/* --------- DARK THEME --------- */
+body.theme-dark{ background-color:#1f2937; color:#d1d5db; }
+body.theme-dark .bg-white{ background-color:#374151 !important; }
+body.theme-dark .bg-gray-100{ background-color:#4b5563 !important; }
+body.theme-dark .bg-gray-200{ background-color:#6b7280 !important; }
+body.theme-dark .text-gray-700{ color:#d1d5db !important; }
+body.theme-dark .text-gray-800{ color:#f3f4f6 !important; }
+body.theme-dark .text-indigo-700, body.theme-dark .text-indigo-600{ color:#a5b4fc !important; }
+.board-flipped{ transform: rotate(180deg); }
+.board-flipped .piece,.board-flipped .move-indicator{ transform: rotate(180deg); }
 </style>
 
 <?php include __DIR__ . '/../../backend/includes/footer.php'; ?>
